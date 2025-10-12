@@ -180,6 +180,7 @@ canvas{
     gap:10px;
     font-size:13px;
   }
+
   .meter span{min-width:56px;letter-spacing:.05em}
   .bar{width:160px}
   .bearhp{
