@@ -206,19 +206,9 @@
   }
 
   // ===== Tap & Hold Move =====
-  const moveTarget = { active:false, x:0, y:0 };
-  function toWorldCoords(clientX, clientY){
-    const rect = cvs.getBoundingClientRect();
-    const sx = (clientX - rect.left) * (BASE_W / rect.width);
-    const sy = (clientY - rect.top) * (BASE_H / rect.height);
-    return { x: clamp(sx + cam.x, 0, world.w), y: clamp(sy + cam.y, 0, world.h) };
-  }
-  function startMoveTo(x,y){ moveTarget.active=true; moveTarget.x=x; moveTarget.y=y; }
-  function stopMove(){ moveTarget.active=false; }
-
   // ===== Drag-to-move only (no long-press) =====
   const DRAG_THRESHOLD = 12; // px（画面座標）
-  const dragState = { active:false, started:false, startX:0, startY:0 };
+  const dragState = { active:false, started:false, startX:0, startY:0, dirX:0, dirY:0 };
 
   // Touch
   cvs.addEventListener('touchstart', e => {
@@ -229,6 +219,8 @@
     dragState.started = false;
     dragState.startX = t.clientX;
     dragState.startY = t.clientY;
+    dragState.dirX = 0;
+    dragState.dirY = 0;
   }, { passive:false });
 
   cvs.addEventListener('touchmove', e => {
@@ -240,13 +232,14 @@
     const moved = Math.hypot(dx, dy);
     if (!dragState.started && moved > DRAG_THRESHOLD) dragState.started = true;
     if (dragState.started) {
-      const p = toWorldCoords(t.clientX, t.clientY);
-      startMoveTo(p.x, p.y);
+      const len = moved || 1;
+      dragState.dirX = dx / len;
+      dragState.dirY = dy / len;
     }
   }, { passive:false });
 
-  cvs.addEventListener('touchend', () => { dragState.active=false; dragState.started=false; stopMove(); }, { passive:true });
-  cvs.addEventListener('touchcancel', () => { dragState.active=false; dragState.started=false; stopMove(); }, { passive:true });
+  cvs.addEventListener('touchend', () => { dragState.active=false; dragState.started=false; dragState.dirX=0; dragState.dirY=0; }, { passive:true });
+  cvs.addEventListener('touchcancel', () => { dragState.active=false; dragState.started=false; dragState.dirX=0; dragState.dirY=0; }, { passive:true });
 
   // Mouse
   cvs.addEventListener('mousedown', e => {
@@ -254,6 +247,8 @@
     dragState.started = false;
     dragState.startX = e.clientX;
     dragState.startY = e.clientY;
+    dragState.dirX = 0;
+    dragState.dirY = 0;
   });
   cvs.addEventListener('mousemove', e => {
     if (!dragState.active) return;
@@ -262,11 +257,12 @@
     const moved = Math.hypot(dx, dy);
     if (!dragState.started && moved > DRAG_THRESHOLD) dragState.started = true;
     if (dragState.started) {
-      const p = toWorldCoords(e.clientX, e.clientY);
-      startMoveTo(p.x, p.y);
+      const len = moved || 1;
+      dragState.dirX = dx / len;
+      dragState.dirY = dy / len;
     }
   });
-  document.addEventListener('mouseup', () => { dragState.active=false; dragState.started=false; stopMove(); });
+  document.addEventListener('mouseup', () => { dragState.active=false; dragState.started=false; dragState.dirX=0; dragState.dirY=0; });
 
   // D-Pad（任意：PCや外付けコントローラ用に残す）
   if(dpad){
@@ -305,11 +301,9 @@
     const sp = player.sp;
 
     let vx=0, vy=0;
-    if (moveTarget.active){
-      const dx = moveTarget.x - player.x;
-      const dy = moveTarget.y - player.y;
-      const d = Math.hypot(dx, dy);
-      if (d > 1){ vx = dx/d*sp; vy = dy/d*sp; } else { stopMove(); }
+    if (dragState.active && dragState.started){
+      vx = dragState.dirX * sp;
+      vy = dragState.dirY * sp;
     } else {
       if(up) vy -= sp;
       if(dn) vy += sp;
