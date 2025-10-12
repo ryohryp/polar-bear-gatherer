@@ -9,6 +9,7 @@ html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:syst
 .fire i{background:linear-gradient(90deg,#ff9b3d,#ffd86a)}
 .bearhp{position:absolute;left:50%;transform:translateX(-50%);top:12px}
 .log{position:absolute;left:12px;bottom:12px;background:rgba(10,14,26,.7);border:1px solid #2b3b6a;border-radius:10px;padding:8px 10px;font-size:12px;max-width:70vw}
+.log{transition:opacity .35s ease}
 .inv{position:absolute;right:12px;top:12px;background:rgba(10,14,26,.7);border:1px solid #2b3b6a;border-radius:10px;padding:8px 10px;font-size:12px}
 canvas{display:block;margin:0 auto;image-rendering:pixelated;touch-action:none}
 .btns{position:absolute;right:12px;bottom:12px;display:flex;gap:8px;pointer-events:auto}
@@ -20,3 +21,15 @@ canvas{display:block;margin:0 auto;image-rendering:pixelated;touch-action:none}
   .dpad{display:none}
 }
 .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;font-size:12px;opacity:.85}
+/* === GameOver overlay === */
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.overlay .overlay-inner{
+  background:rgba(10,14,26,.85);
+  border:1px solid #2b3b6a;
+  border-radius:12px;
+  padding:22px 28px;
+  text-align:center;
+  box-shadow:0 8px 40px rgba(0,0,0,.35);
+}
+.overlay .title{font-size:28px;font-weight:800;letter-spacing:.08em;margin-bottom:8px}
+.overlay .subtitle{font-size:14px;opacity:.9}
