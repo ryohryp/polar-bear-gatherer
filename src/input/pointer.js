@@ -71,31 +71,6 @@ export function attachPointer(){
   });
   document.addEventListener('mouseup', () => { endStick(); });
 
-  // D-Pad（PC/コントローラ用に維持）
-  const dpad = state.ui.dpad;
-  if(dpad){
-    const applyDir = (dir, value)=>{
-      if(dir==='up') state.touchDir.up = value;
-      else if(dir==='down') state.touchDir.down = value;
-      else if(dir==='left') state.touchDir.left = value;
-      else if(dir==='right') state.touchDir.right = value;
-    };
-    dpad.querySelectorAll('button').forEach(btn=>{
-      const dir = btn.dataset.dir; if(!dir) return;
-      const start = e=>{ e.preventDefault(); applyDir(dir, true); };
-      const end = ()=>applyDir(dir, false);
-      btn.addEventListener('touchstart', start, {passive:false});
-      btn.addEventListener('touchend', end);
-      btn.addEventListener('touchcancel', end);
-      btn.addEventListener('mousedown', start);
-      btn.addEventListener('mouseup', end);
-      btn.addEventListener('mouseleave', end);
-    });
-    document.addEventListener('mouseup',   ()=>{ state.touchDir.up=state.touchDir.down=state.touchDir.left=state.touchDir.right=false; });
-    document.addEventListener('touchend',  ()=>{ state.touchDir.up=state.touchDir.down=state.touchDir.left=state.touchDir.right=false; });
-    document.addEventListener('touchcancel',()=>{ state.touchDir.up=state.touchDir.down=state.touchDir.left=state.touchDir.right=false; });
-  }
-
   // C キー（クラフト）ショートカット
   document.addEventListener('keydown', e=>{
     if(e.key==='c'||e.key==='C'){ state.keys.add('C'); }

@@ -7,9 +7,8 @@ export const state = {
   ctx: null,
   ui: null,
 
-  // 入力（キーボード / D-Pad / ドラッグターゲット）
+  // 入力（キーボード / ドラッグターゲット）
   keys: new Set(),
-  touchDir: { up:false, down:false, left:false, right:false },
   moveTarget: { active:false, x:0, y:0 }, // 互換残置（未使用化）
   dragState: { active:false, started:false, startX:0, startY:0 }, // 互換残置（未使用化）
   stick: {

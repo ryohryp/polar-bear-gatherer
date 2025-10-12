@@ -14,11 +14,7 @@ html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:syst
 canvas{display:block;margin:0 auto;image-rendering:pixelated;touch-action:none}
 .btns{position:absolute;right:12px;bottom:12px;display:flex;gap:8px;pointer-events:auto}
 .btns button{background:#243357;color:#fff;border:1px solid #2b3b6a;border-radius:10px;padding:10px 12px;font-size:14px}
-.dpad{position:absolute;left:12px;bottom:12px;display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:8px;pointer-events:auto}
-.dpad button{background:#243357;color:#fff;border:1px solid #2b3b6a;border-radius:14px;font-size:20px;width:100%;height:100%;touch-action:none}
-.dpad span{display:block}
 @media (hover:hover) and (pointer:fine){
-  .dpad{display:none}
 }
 .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;font-size:12px;opacity:.85}
 /* === GameOver overlay === */
@@ -71,26 +67,18 @@ canvas{display:block;margin:0 auto;image-rendering:pixelated;touch-action:none}
   .meter span{min-width:52px;letter-spacing:.05em}
   .bar{flex:1;width:auto}
   .bearhp{order:2;text-align:center}
-  .bearhp .bar{margin-top:6px}
-  .inv{order:3;text-align:center;font-size:13px;padding:12px 14px}
-  .log{order:4;text-align:left;font-size:13px;padding:12px 14px;max-width:none}
-  .btns{
-    order:5;
-    display:flex;
-    justify-content:center;
-    gap:12px;
-    pointer-events:auto;
-  }
-  .btns button{flex:1;min-width:0;font-size:15px;padding:14px 16px}
-  .dpad{
-    order:6;
-    display:grid;
-    grid-template-columns:repeat(3,64px);
-    grid-template-rows:repeat(3,64px);
-    gap:12px;
-    margin:0 auto;
-  }
-  .hint{order:7;text-align:center;font-size:12px}
+    .bearhp .bar{margin-top:6px}
+    .inv{order:3;text-align:center;font-size:13px;padding:12px 14px}
+    .log{order:4;text-align:left;font-size:13px;padding:12px 14px;max-width:none}
+    .btns{
+      order:5;
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      pointer-events:auto;
+    }
+    .btns button{flex:1;min-width:0;font-size:15px;padding:14px 16px}
+    .hint{order:6;text-align:center;font-size:12px}
   .log,.inv{background:rgba(10,14,26,.78)}
 }
 

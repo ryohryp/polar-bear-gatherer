@@ -37,7 +37,6 @@ import { showGameOver } from './src/ui/hud.js';
       inv: document.getElementById('inv'),
       log: document.getElementById('log'),
       btnCraft: document.getElementById('btnCraft'),
-      dpad: document.getElementById('dpad'),
       btnRestart: document.getElementById('btnRestart'),
     }
   });
