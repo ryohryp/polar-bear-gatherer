@@ -1,0 +1,30 @@
+{
+  "name": "polar-bear-gatherer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Polar Bear Gatherer – HTML5 Canvas game",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5173"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryohryp/polar-bear-gatherer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ryohryp/polar-bear-gatherer/issues"
+  },
+  "homepage": "https://github.com/ryohryp/polar-bear-gatherer#readme",
+  "devDependencies": {
+    "vite": "^5.4.20"
+  },
+  "volta": {
+    "node": "22.20.0",
+    "npm": "11.6.2"
+  }
+}
