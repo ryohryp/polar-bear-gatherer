@@ -51,7 +51,7 @@
       <div class="bar"><i id="bearFill" style="width:100%"></i></div>
     </div>
     <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
-    <div class="log" id="log">WASD/矢印で移動、SPACEで伐採/攻撃、Cで槍クラフト、Fで焚き火に木材。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="log" id="log">WASD/矢印で移動、SPACEで攻撃、Cで槍クラフト。木の伐採と焚き火への木材補充は自動 (Fで手動)。倒木は◎、木は▲。焚き火●で体温回復。</div>
     <div class="dpad" id="dpad">
       <span></span>
       <button data-dir="up">↑</button>
@@ -64,9 +64,9 @@
       <span></span>
     </div>
     <div class="btns">
-      <button id="btnAct">伐採/攻撃</button>
+      <button id="btnAct">攻撃</button>
       <button id="btnCraft">槍クラフト</button>
-      <button id="btnFeed">焚き火に木材</button>
+      <button id="btnFeed">焚き火に木材 (手動)</button>
     </div>
     <div class="hint">スマホは左下パッドと右下ボタン使用可</div>
   </div>
@@ -104,6 +104,8 @@
   const btnFeed = document.getElementById('btnFeed');
   const dpad = document.getElementById('dpad');
   const touchDir = { up:false, down:false, left:false, right:false };
+  let autoChopCooldown = 0;
+  let autoFeedCooldown = 0;
 
   const world = { w: 2000, h: 1400 };
   const cam = { x:0, y:0 };
@@ -146,55 +148,90 @@
     speed: 0.6+Math.random()*0.8
   }));
 
-  function feedFire(){
-    if(inv.wood<=0){ log('木材が足りない…'); return; }
+  function feedFire(auto=false){
+    if(inv.wood<=0){
+      if(!auto) log('木材が足りない…');
+      return false;
+    }
     const near = dist(player, fire)<50;
-    if(!near){ log('焚き火に近づこう'); return; }
+    if(!near){
+      if(!auto) log('焚き火に近づこう');
+      return false;
+    }
+    if(auto && fire.heat>92 && fire.embers>15){
+      return false;
+    }
     inv.wood--;
     fire.heat = clamp(fire.heat + 18, 0, 100);
     fire.embers = 60;
-    log('焚き火をくべた！温度が上昇');
+    autoFeedCooldown = auto ? 120 : 90;
+    log(auto ? '焚き火に木材をくべた（自動）' : '焚き火をくべた！温度が上昇');
+    return true;
   }
 
-  function action(){
-    // chop nearest tree within 30
-    let target=null, dmin=1e9;
+  function findNearestTree(maxDist){
+    let target=null, dmin=maxDist;
     for(const t of trees){
       if(t.hp>0){
         const d = Math.hypot(t.x-player.x, t.y-player.y);
         if(d<dmin){ dmin=d; target=t; }
       }
     }
-    if(target && dmin<32){
-      target.hp -= player.hasSpear? 18:10;
-      log('木を伐採中…');
-      if(target.hp<=0){
-        drops.push({x:target.x, y:target.y, type:'log'});
-        log('木を倒した！木材+1');
-      }
-      return;
+    return target;
+  }
+
+  function tryChopNearestTree(source='manual'){
+    const target = findNearestTree(32);
+    if(!target) return false;
+    const dmg = player.hasSpear? 18:10;
+    autoChopCooldown = player.hasSpear? 18:24;
+    target.hp = Math.max(0, target.hp - dmg);
+    if(target.hp>0){
+      log(source==='auto' ? '木を伐採中…（自動）' : '木を伐採中…');
+    } else {
+      drops.push({x:target.x, y:target.y, type:'log'});
+      log(source==='auto' ? '木を倒した！木材が落ちた（自動）' : '木を倒した！木材が落ちた');
     }
-    // attack bear if close
+    return true;
+  }
+
+  function tryAttackBear(){
     if (bear.alive && dist(player,bear)<34 && player.atkCD<=0){
       const dmg = player.atk; bear.hp -= dmg; player.atkCD=18; ui.bear.style.width = Math.max(0,(bear.hp/150*100))+'%';
       log('クマに攻撃！ -'+dmg);
       if (bear.hp<=0){ bear.alive=false; drops.push({x:bear.x,y:bear.y,type:'meat'}); log('白熊を倒した！肉を入手'); ui.bearHud.style.display='none'; }
-      return;
+      return true;
     }
-    // pickup drops
+    return false;
+  }
+
+  function pickupDrops(source='manual'){
+    let picked=false;
     for(let i=drops.length-1;i>=0;i--){
       const d = Math.hypot(drops[i].x-player.x, drops[i].y-player.y);
       if(d<28){
         if(drops[i].type==='log') inv.wood++;
         else inv.meat++;
-        drops.splice(i,1); log('アイテムを拾った');
+        drops.splice(i,1);
+        picked = true;
       }
     }
+    if(picked){
+      log(source==='auto' ? 'アイテムを拾った（自動）' : 'アイテムを拾った');
+      return true;
+    }
+    return false;
+  }
+
+  function action(){
+    if(tryAttackBear()) return;
+    if(tryChopNearestTree('manual')) return;
+    pickupDrops('manual');
   }
 
   btnAct.addEventListener('click', ()=>action());
   btnCraft.addEventListener('click', ()=>craftSpear());
-  btnFeed.addEventListener('click', ()=>feedFire());
+  btnFeed.addEventListener('click', ()=>feedFire(false));
 
   // ===== Main Loop =====
   function update(){
@@ -206,8 +243,11 @@
     if(up) player.y-=sp; if(dn) player.y+=sp; if(lt) player.x-=sp; if(rt) player.x+=sp;
     player.x = clamp(player.x, 0, world.w); player.y = clamp(player.y, 0, world.h);
 
-    // temperature & healing near fire
-    const nearFire = dist(player, fire)<60 && fire.heat>0;
+    if(autoChopCooldown>0) autoChopCooldown--;
+    if(autoFeedCooldown>0) autoFeedCooldown--;
+
+    const distToFire = dist(player, fire);
+    const nearFire = distToFire<60 && fire.heat>0;
     player.cold += nearFire? 0.25 + fire.heat*0.004 : -(0.04 + (100-fire.heat)*0.0006);
     player.cold = clamp(player.cold, 0, 100);
     if(nearFire && player.hp<100) player.hp += 0.06;
@@ -215,6 +255,16 @@
 
     fire.heat = clamp(fire.heat - 0.018, 0, 100);
     if(fire.embers>0) fire.embers--;
+
+    if(autoChopCooldown<=0){
+      tryChopNearestTree('auto');
+    }
+    pickupDrops('auto');
+
+    const needsFuel = fire.heat<70 || fire.embers<10;
+    if(autoFeedCooldown<=0 && distToFire<50 && needsFuel){
+      feedFire(true);
+    }
 
     // bear AI
     if(bear.alive && bear.aggro){
@@ -238,12 +288,12 @@
     ui.hp.style.width = (player.hp)+'%';
     ui.tmp.style.width = (player.cold)+'%';
     ui.fire.style.width = (fire.heat)+'%';
-    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}<br>焚き火はFでくべる`; 
+    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}<br>焚き火は自動で木材補充 (Fで手動)`;
 
     // keyboard actions
     if(keys.has(' ')||keys.has('Spacebar')){ keys.delete(' '); keys.delete('Spacebar'); action(); }
     if(keys.has('c')||keys.has('C')){ keys.delete('c'); keys.delete('C'); craftSpear(); }
-    if(keys.has('f')||keys.has('F')){ keys.delete('f'); keys.delete('F'); feedFire(); }
+    if(keys.has('f')||keys.has('F')){ keys.delete('f'); keys.delete('F'); feedFire(false); }
     if(keys.has('r')||keys.has('R')){ if(player.hp<=0) restart(); }
   }
 
@@ -331,7 +381,7 @@
     // goal text
     if(!player.hasSpear){
       drawText('木材10で槍クラフト → 白熊撃破で肉確保', BASE_W/2, 60);
-      drawText('焚き火の炎を絶やさないよう木材をくべよう [F]', BASE_W/2, 84);
+      drawText('焚き火の炎を絶やさないよう木材を自動補充 (Fで手動追加)', BASE_W/2, 84);
     } else if(bear.alive){
       drawText('白熊を倒そう！', BASE_W/2, 60);
       drawText('焚き火で温まりつつ戦うと安全', BASE_W/2, 84);
@@ -350,13 +400,14 @@
     trees.forEach(t=>t.hp = Math.random()<0.5? 30:20);
     bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; drops.length=0;
     fire.heat = 70; fire.embers = 0;
+    autoChopCooldown = 0; autoFeedCooldown = 0;
     log('再開！');
   }
 
   // Input helpers for mobile
   btnAct.addEventListener('touchstart', e=>{ e.preventDefault(); action(); });
   btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); });
-  btnFeed.addEventListener('touchstart', e=>{ e.preventDefault(); feedFire(); });
+  btnFeed.addEventListener('touchstart', e=>{ e.preventDefault(); feedFire(false); });
 
   if(dpad){
     const applyDir = (dir, value)=>{
