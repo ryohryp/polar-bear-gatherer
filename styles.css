@@ -1,5 +1,5 @@
 html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-#ui{position:fixed;inset:0;pointer-events:none}
+#ui{position:fixed;inset:0;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px)}
 .hud{position:absolute;left:12px;top:12px;display:flex;gap:14px;align-items:flex-end}
 .meter{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;letter-spacing:.04em}
 .bar{height:12px;width:120px;background:#1b2744;border-radius:8px;overflow:hidden;border:1px solid #2b3b6a;box-shadow:0 0 6px rgba(28,43,83,.45) inset}

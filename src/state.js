@@ -10,8 +10,14 @@ export const state = {
   // 入力（キーボード / D-Pad / ドラッグターゲット）
   keys: new Set(),
   touchDir: { up:false, down:false, left:false, right:false },
-  moveTarget: { active:false, x:0, y:0 },
-  dragState: { active:false, started:false, startX:0, startY:0 },
+  moveTarget: { active:false, x:0, y:0 }, // 互換残置（未使用化）
+  dragState: { active:false, started:false, startX:0, startY:0 }, // 互換残置（未使用化）
+  stick: {
+    active: false,
+    originX: 0, originY: 0,
+    curX: 0, curY: 0,
+    dirX: 0, dirY: 0,
+  },
 
   // カメラ・ワールド
   world: { ...WORLD },

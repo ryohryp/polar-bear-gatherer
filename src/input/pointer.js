@@ -1,4 +1,4 @@
-import { DRAG_THRESHOLD, BASE_W, BASE_H } from '../config.js';
+import { BASE_W, BASE_H, STICK } from '../config.js';
 import { state } from '../state.js';
 import { clamp } from '../utils.js';
 
@@ -12,59 +12,64 @@ function toWorldCoords(clientX, clientY){
   };
 }
 
-function startMoveTo(x,y){ state.moveTarget.active=true; state.moveTarget.x=x; state.moveTarget.y=y; }
-function stopMove(){ state.moveTarget.active=false; }
+function startStick(x, y){
+  const s = state.stick;
+  s.active = true;
+  s.originX = s.curX = x;
+  s.originY = s.curY = y;
+  s.dirX = 0; s.dirY = 0;
+}
+function updateStick(x, y){
+  const s = state.stick;
+  if (!s.active) return;
+  s.curX = x; s.curY = y;
+  const dx = s.curX - s.originX;
+  const dy = s.curY - s.originY;
+  const len = Math.hypot(dx, dy);
+  if (len <= STICK.DEADZONE){
+    s.dirX = 0; s.dirY = 0;
+    return;
+  }
+  const clampLen = Math.min(len, STICK.MAX_RADIUS);
+  const nx = dx / (clampLen || 1);
+  const ny = dy / (clampLen || 1);
+  s.dirX = nx;
+  s.dirY = ny;
+}
+function endStick(){
+  const s = state.stick;
+  s.active = false;
+  s.dirX = 0; s.dirY = 0;
+}
 
 export function attachPointer(){
   const cvs = state.canvas;
 
-  // Touch
+  // Touch（タップ起点 → ドラッグ方向ベクトル）
   cvs.addEventListener('touchstart', e => {
     if (e.touches.length === 0) return;
     e.preventDefault();
     const t = e.touches[0];
-    state.dragState.active = true;
-    state.dragState.started = false;
-    state.dragState.startX = t.clientX;
-    state.dragState.startY = t.clientY;
+    startStick(t.clientX, t.clientY);
   }, { passive:false });
 
   cvs.addEventListener('touchmove', e => {
-    if (!state.dragState.active) return;
     e.preventDefault();
     const t = e.touches[0];
-    const dx = t.clientX - state.dragState.startX;
-    const dy = t.clientY - state.dragState.startY;
-    const moved = Math.hypot(dx, dy);
-    if (!state.dragState.started && moved > DRAG_THRESHOLD) state.dragState.started = true;
-    if (state.dragState.started) {
-      const p = toWorldCoords(t.clientX, t.clientY);
-      startMoveTo(p.x, p.y);
-    }
+    updateStick(t.clientX, t.clientY);
   }, { passive:false });
 
-  cvs.addEventListener('touchend',   () => { state.dragState.active=false; state.dragState.started=false; stopMove(); }, { passive:true });
-  cvs.addEventListener('touchcancel',() => { state.dragState.active=false; state.dragState.started=false; stopMove(); }, { passive:true });
+  cvs.addEventListener('touchend',   () => { endStick(); }, { passive:true });
+  cvs.addEventListener('touchcancel',() => { endStick(); }, { passive:true });
 
-  // Mouse
+  // Mouse（PCでも同様操作）
   cvs.addEventListener('mousedown', e => {
-    state.dragState.active = true;
-    state.dragState.started = false;
-    state.dragState.startX = e.clientX;
-    state.dragState.startY = e.clientY;
+    startStick(e.clientX, e.clientY);
   });
   cvs.addEventListener('mousemove', e => {
-    if (!state.dragState.active) return;
-    const dx = e.clientX - state.dragState.startX;
-    const dy = e.clientY - state.dragState.startY;
-    const moved = Math.hypot(dx, dy);
-    if (!state.dragState.started && moved > DRAG_THRESHOLD) state.dragState.started = true;
-    if (state.dragState.started) {
-      const p = toWorldCoords(e.clientX, e.clientY);
-      startMoveTo(p.x, p.y);
-    }
+    updateStick(e.clientX, e.clientY);
   });
-  document.addEventListener('mouseup', () => { state.dragState.active=false; state.dragState.started=false; stopMove(); });
+  document.addEventListener('mouseup', () => { endStick(); });
 
   // D-Pad（PC/コントローラ用に維持）
   const dpad = state.ui.dpad;
