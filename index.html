@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Polar Bear Gatherer — MVP</title>
+  <title>Polar Bear Gatherer — Mobile Optimized</title>
   <style>
-    html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
+    html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     #ui{position:fixed;inset:0;pointer-events:none}
     .hud{position:absolute;left:12px;top:12px;display:flex;gap:14px;align-items:flex-end}
     .meter{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;letter-spacing:.04em}
     .bar{height:12px;width:120px;background:#1b2744;border-radius:8px;overflow:hidden;border:1px solid #2b3b6a;box-shadow:0 0 6px rgba(28,43,83,.45) inset}
-    .bar > i{display:block;height:100%;background:#62b0ff}
+    .bar>i{display:block;height:100%;background:#62b0ff}
     .tmp i{background:#ff628f}
     .hp i{background:#65f3a8}
     .fire i{background:linear-gradient(90deg,#ff9b3d,#ffd86a)}
@@ -51,7 +51,7 @@
       <div class="bar"><i id="bearFill" style="width:100%"></i></div>
     </div>
     <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
-    <div class="log" id="log">WASD/矢印で移動、SPACEで攻撃、Cで槍クラフト。木の伐採と焚き火への木材補充は自動 (Fで手動)。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="log" id="log">画面長押しで移動。Cで槍クラフト。伐採・攻撃・焚き火への木材投入は自動。倒木は◎、木は▲。焚き火●で体温回復。</div>
     <div class="dpad" id="dpad">
       <span></span>
       <button data-dir="up">↑</button>
@@ -64,32 +64,31 @@
       <span></span>
     </div>
     <div class="btns">
-      <button id="btnAct">攻撃</button>
       <button id="btnCraft">槍クラフト</button>
-      <button id="btnFeed">焚き火に木材 (手動)</button>
     </div>
-    <div class="hint">スマホは左下パッドと右下ボタン使用可</div>
+    <div class="hint">画面を長押しで移動／伐採・攻撃・焚き火投入は自動</div>
   </div>
+
 <script>
 (() => {
   const cvs = document.getElementById('game');
   const ctx = cvs.getContext('2d');
-  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
   const BASE_W = 960, BASE_H = 540;
   function resize(){
     const w = Math.min(window.innerWidth, BASE_W);
     const h = Math.min(window.innerHeight, BASE_H);
     const scale = Math.min(w/BASE_W, h/BASE_H);
-    cvs.style.width = (BASE_W*scale)|0 + 'px';
-    cvs.style.height = (BASE_H*scale)|0 + 'px';
+    cvs.style.width = (BASE_W*scale|0) + 'px';
+    cvs.style.height = (BASE_H*scale|0) + 'px';
   }
   addEventListener('resize', resize); resize();
 
-  // ===== Data & State =====
+  // ===== Input =====
   const keys = new Set();
   document.addEventListener('keydown', e=>{ keys.add(e.key); });
   document.addEventListener('keyup', e=>{ keys.delete(e.key); });
 
+  // ===== UI Refs =====
   const ui = {
     hp: document.getElementById('hpFill'),
     tmp: document.getElementById('tmpFill'),
@@ -99,46 +98,22 @@
     inv: document.getElementById('inv'),
     log: document.getElementById('log')
   };
-  const btnAct = document.getElementById('btnAct');
   const btnCraft = document.getElementById('btnCraft');
-  const btnFeed = document.getElementById('btnFeed');
   const dpad = document.getElementById('dpad');
   const touchDir = { up:false, down:false, left:false, right:false };
-  let autoChopCooldown = 0;
-  let autoFeedCooldown = 0;
 
+  // ===== World / Entities =====
   const world = { w: 2000, h: 1400 };
   const cam = { x:0, y:0 };
-  const player = { x: 200, y: 400, r: 12, sp: 2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0 };
-  const fire = { x: 220, y: 420, r: 18, heat: 70, embers:0 };
+  const player = { x:200, y:400, r:12, sp:2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0 };
+  const fire = { x:220, y:420, r:18, heat:70, embers:0 };
+  const inv = { wood:0, meat:0 };
 
-  // Resource nodes
-  const trees = []; // {x,y,hp}
+  const trees = [];
   for(let i=0;i<45;i++) trees.push({ x: 300+ Math.random()*1600, y: 200+Math.random()*1000, hp: 30});
 
-  // Bear boss (spawns after craft or when meat goal starts)
-  const bear = { x:1600, y: 900, r: 18, hp: 150, alive:true, aggro:false, inv:0 };
-
-  const drops = []; // {x,y,type:'log'|'meat'}
-
-  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
-  function clamp(v,mi,ma){ return v<mi?mi: v>ma?ma: v; }
-
-  function log(msg){ ui.log.textContent = msg; }
-
-  function craftSpear(){
-    if (inv.wood>=10 && !player.hasSpear){
-      inv.wood -= 10; player.hasSpear = true; player.atk = 22; log('槍をクラフト！攻撃力が上がった');
-      bear.aggro = true; // spawn behavior
-      ui.bearHud.style.display = 'block';
-    } else if (player.hasSpear){
-      log('もう槍は装備済み');
-    } else {
-      log('木材が足りない (10必要)');
-    }
-  }
-
-  const inv = { wood:0, meat:0 };
+  const bear = { x:1600, y:900, r:18, hp:150, alive:true, aggro:false, inv:0 };
+  const drops = [];
 
   const snow = Array.from({length:120},()=>({
     x: Math.random()*world.w,
@@ -148,24 +123,32 @@
     speed: 0.6+Math.random()*0.8
   }));
 
+  // ===== Utils =====
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+  function clamp(v,mi,ma){ return v<mi?mi: v>ma?ma: v; }
+  function log(msg){ ui.log.textContent = msg; }
+
+  // ===== Systems =====
+  function craftSpear(){
+    if (inv.wood>=10 && !player.hasSpear){
+      inv.wood -= 10; player.hasSpear = true; player.atk = 22; log('槍をクラフト！攻撃力が上がった');
+      bear.aggro = true; ui.bearHud.style.display='block';
+    } else if (player.hasSpear){
+      log('もう槍は装備済み');
+    } else {
+      log('木材が足りない (10必要)');
+    }
+  }
+
   function feedFire(auto=false){
-    if(inv.wood<=0){
-      if(!auto) log('木材が足りない…');
-      return false;
-    }
+    if(inv.wood<=0){ if(!auto) log('木材が足りない…'); return false; }
     const near = dist(player, fire)<50;
-    if(!near){
-      if(!auto) log('焚き火に近づこう');
-      return false;
-    }
-    if(auto && fire.heat>92 && fire.embers>15){
-      return false;
-    }
+    if(!near){ if(!auto) log('焚き火に近づこう'); return false; }
+    if(auto && fire.heat>92 && fire.embers>15) return false;
     inv.wood--;
     fire.heat = clamp(fire.heat + 18, 0, 100);
     fire.embers = 60;
-    autoFeedCooldown = auto ? 120 : 90;
-    log(auto ? '焚き火に木材をくべた（自動）' : '焚き火をくべた！温度が上昇');
+    log(auto ? '焚き火に木材をくべた（自動）' : '焚き火をくべた！');
     return true;
   }
 
@@ -173,7 +156,7 @@
     let target=null, dmin=maxDist;
     for(const t of trees){
       if(t.hp>0){
-        const d = Math.hypot(t.x-player.x, t.y-player.y);
+        const d = dist(t, player);
         if(d<dmin){ dmin=d; target=t; }
       }
     }
@@ -184,22 +167,25 @@
     const target = findNearestTree(32);
     if(!target) return false;
     const dmg = player.hasSpear? 18:10;
-    autoChopCooldown = player.hasSpear? 18:24;
     target.hp = Math.max(0, target.hp - dmg);
     if(target.hp>0){
       log(source==='auto' ? '木を伐採中…（自動）' : '木を伐採中…');
     } else {
       drops.push({x:target.x, y:target.y, type:'log'});
-      log(source==='auto' ? '木を倒した！木材が落ちた（自動）' : '木を倒した！木材が落ちた');
+      log(source==='auto' ? '木を倒した！（自動）' : '木を倒した！');
     }
     return true;
   }
 
   function tryAttackBear(){
     if (bear.alive && dist(player,bear)<34 && player.atkCD<=0){
-      const dmg = player.atk; bear.hp -= dmg; player.atkCD=18; ui.bear.style.width = Math.max(0,(bear.hp/150*100))+'%';
+      const dmg = player.atk; bear.hp -= dmg; player.atkCD=18;
+      ui.bear.style.width = Math.max(0,(bear.hp/150*100))+'%';
       log('クマに攻撃！ -'+dmg);
-      if (bear.hp<=0){ bear.alive=false; drops.push({x:bear.x,y:bear.y,type:'meat'}); log('白熊を倒した！肉を入手'); ui.bearHud.style.display='none'; }
+      if (bear.hp<=0){
+        bear.alive=false; drops.push({x:bear.x,y:bear.y,type:'meat'});
+        log('白熊を倒した！肉を入手'); ui.bearHud.style.display='none';
+      }
       return true;
     }
     return false;
@@ -208,44 +194,113 @@
   function pickupDrops(source='manual'){
     let picked=false;
     for(let i=drops.length-1;i>=0;i--){
-      const d = Math.hypot(drops[i].x-player.x, drops[i].y-player.y);
-      if(d<28){
+      if(dist(drops[i],player)<28){
         if(drops[i].type==='log') inv.wood++;
         else inv.meat++;
         drops.splice(i,1);
         picked = true;
       }
     }
-    if(picked){
-      log(source==='auto' ? 'アイテムを拾った（自動）' : 'アイテムを拾った');
-      return true;
-    }
+    if(picked){ log(source==='auto' ? 'アイテムを拾った（自動）' : 'アイテムを拾った'); return true; }
     return false;
   }
 
-  function action(){
-    if(tryAttackBear()) return;
-    if(tryChopNearestTree('manual')) return;
-    pickupDrops('manual');
+  // ===== Tap & Hold Move =====
+  const moveTarget = { active:false, x:0, y:0 };
+  function toWorldCoords(clientX, clientY){
+    const rect = cvs.getBoundingClientRect();
+    const sx = (clientX - rect.left) * (BASE_W / rect.width);
+    const sy = (clientY - rect.top) * (BASE_H / rect.height);
+    return { x: clamp(sx + cam.x, 0, world.w), y: clamp(sy + cam.y, 0, world.h) };
+  }
+  function startMoveTo(x,y){ moveTarget.active=true; moveTarget.x=x; moveTarget.y=y; }
+  function stopMove(){ moveTarget.active=false; }
+
+  // Pointer handlers（長押し＆ドラッグで追従）
+  cvs.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const t = e.touches[0];
+    const p = toWorldCoords(t.clientX, t.clientY);
+    startMoveTo(p.x, p.y);
+  }, { passive:false });
+
+  cvs.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!moveTarget.active) return;
+    const t = e.touches[0];
+    const p = toWorldCoords(t.clientX, t.clientY);
+    startMoveTo(p.x, p.y);
+  }, { passive:false });
+
+  cvs.addEventListener('touchend', stopMove, { passive:true });
+  cvs.addEventListener('touchcancel', stopMove, { passive:true });
+
+  cvs.addEventListener('mousedown', e => {
+    const p = toWorldCoords(e.clientX, e.clientY);
+    startMoveTo(p.x, p.y);
+  });
+  cvs.addEventListener('mousemove', e => {
+    if (!moveTarget.active) return;
+    const p = toWorldCoords(e.clientX, e.clientY);
+    startMoveTo(p.x, p.y);
+  });
+  document.addEventListener('mouseup', stopMove);
+
+  // D-Pad（任意：PCや外付けコントローラ用に残す）
+  if(dpad){
+    const applyDir = (dir, value)=>{
+      if(dir==='up') touchDir.up = value;
+      else if(dir==='down') touchDir.down = value;
+      else if(dir==='left') touchDir.left = value;
+      else if(dir==='right') touchDir.right = value;
+    };
+    dpad.querySelectorAll('button').forEach(btn=>{
+      const dir = btn.dataset.dir; if(!dir) return;
+      const start = e=>{ e.preventDefault(); applyDir(dir, true); };
+      const end = ()=>applyDir(dir, false);
+      btn.addEventListener('touchstart', start, {passive:false});
+      btn.addEventListener('touchend', end);
+      btn.addEventListener('touchcancel', end);
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', end);
+      btn.addEventListener('mouseleave', end);
+    });
+    document.addEventListener('mouseup', ()=>{ touchDir.up=touchDir.down=touchDir.left=touchDir.right=false; });
+    document.addEventListener('touchend', ()=>{ touchDir.up=touchDir.down=touchDir.left=touchDir.right=false; });
+    document.addEventListener('touchcancel', ()=>{ touchDir.up=touchDir.down=touchDir.left=touchDir.right=false; });
   }
 
-  btnAct.addEventListener('click', ()=>action());
-  btnCraft.addEventListener('click', ()=>craftSpear());
-  btnFeed.addEventListener('click', ()=>feedFire(false));
+  // ===== Main Update =====
+  let autoChopCooldown = 0;
+  let autoFeedCooldown = 0;
 
-  // ===== Main Loop =====
   function update(){
+    // 移動
     const up = keys.has('w')||keys.has('ArrowUp')||touchDir.up;
     const dn = keys.has('s')||keys.has('ArrowDown')||touchDir.down;
     const lt = keys.has('a')||keys.has('ArrowLeft')||touchDir.left;
     const rt = keys.has('d')||keys.has('ArrowRight')||touchDir.right;
     const sp = player.sp;
-    if(up) player.y-=sp; if(dn) player.y+=sp; if(lt) player.x-=sp; if(rt) player.x+=sp;
-    player.x = clamp(player.x, 0, world.w); player.y = clamp(player.y, 0, world.h);
+
+    let vx=0, vy=0;
+    if (moveTarget.active){
+      const dx = moveTarget.x - player.x;
+      const dy = moveTarget.y - player.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 1){ vx = dx/d*sp; vy = dy/d*sp; } else { stopMove(); }
+    } else {
+      if(up) vy -= sp;
+      if(dn) vy += sp;
+      if(lt) vx -= sp;
+      if(rt) vx += sp;
+    }
+    player.x = clamp(player.x + vx, 0, world.w);
+    player.y = clamp(player.y + vy, 0, world.h);
 
     if(autoChopCooldown>0) autoChopCooldown--;
     if(autoFeedCooldown>0) autoFeedCooldown--;
 
+    // 温度/HP/焚き火
     const distToFire = dist(player, fire);
     const nearFire = distToFire<60 && fire.heat>0;
     player.cold += nearFire? 0.25 + fire.heat*0.004 : -(0.04 + (100-fire.heat)*0.0006);
@@ -256,60 +311,64 @@
     fire.heat = clamp(fire.heat - 0.018, 0, 100);
     if(fire.embers>0) fire.embers--;
 
-    if(autoChopCooldown<=0){
-      tryChopNearestTree('auto');
+    // 自動攻撃（近接）
+    if(bear.alive && player.atkCD<=0 && dist(player,bear)<34){
+      tryAttackBear();
     }
+
+    // 自動伐採（クールダウンを軽く再導入）
+    if(autoChopCooldown<=0){
+      if(tryChopNearestTree('auto')) autoChopCooldown = player.hasSpear? 18 : 24;
+    }
+
+    // 自動拾得
     pickupDrops('auto');
 
+    // 自動くべ
     const needsFuel = fire.heat<70 || fire.embers<10;
     if(autoFeedCooldown<=0 && distToFire<50 && needsFuel){
-      feedFire(true);
+      if(feedFire(true)) autoFeedCooldown = 120;
     }
 
-    // bear AI
+    // Bear AI
     if(bear.alive && bear.aggro){
       const dx = player.x - bear.x; const dy = player.y - bear.y; const d = Math.hypot(dx,dy);
       const speed = 1.1 + (player.hasSpear? 0.2:0);
       if(d>1){ bear.x += dx/d*speed; bear.y += dy/d*speed; }
-      // attack
-      if(d<26 && bear.inv<=0){
-        player.hp -= 8; bear.inv=35; log('クマの攻撃！-8');
-      }
+      if(d<26 && bear.inv<=0){ player.hp -= 8; bear.inv=35; log('クマの攻撃！-8'); }
       if(bear.inv>0) bear.inv--;
     }
 
     if(player.atkCD>0) player.atkCD--;
-
-    // death check
     if(player.cold<=0){ player.hp -= 0.15; }
     if(player.hp<=0){ player.hp=0; log('力尽きた… Rで再開'); }
 
-    // UI update
-    ui.hp.style.width = (player.hp)+'%';
-    ui.tmp.style.width = (player.cold)+'%';
-    ui.fire.style.width = (fire.heat)+'%';
-    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}<br>焚き火は自動で木材補充 (Fで手動)`;
+    // UI
+    ui.hp.style.width = player.hp+'%';
+    ui.tmp.style.width = player.cold+'%';
+    ui.fire.style.width = fire.heat+'%';
+    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}<br>焚き火は自動で木材補充`;
 
-    // keyboard actions
-    if(keys.has(' ')||keys.has('Spacebar')){ keys.delete(' '); keys.delete('Spacebar'); action(); }
+    // Keys
     if(keys.has('c')||keys.has('C')){ keys.delete('c'); keys.delete('C'); craftSpear(); }
-    if(keys.has('f')||keys.has('F')){ keys.delete('f'); keys.delete('F'); feedFire(false); }
     if(keys.has('r')||keys.has('R')){ if(player.hp<=0) restart(); }
   }
 
+  // ===== Render =====
   function draw(){
     ctx.clearRect(0,0,BASE_W,BASE_H);
-    // camera follow
+    // camera
     cam.x = clamp(player.x - BASE_W/2, 0, world.w-BASE_W);
     cam.y = clamp(player.y - BASE_H/2, 0, world.h-BASE_H);
 
-    // bg grid snow
+    // bg
     ctx.fillStyle = '#0e1730';
     ctx.fillRect(0,0,BASE_W,BASE_H);
+
     ctx.save();
     ctx.translate(-cam.x, -cam.y);
 
-    // snow tiles
+    // tiles
     for(let x=0;x<world.w;x+=80){
       for(let y=0;y<world.h;y+=80){
         ctx.fillStyle = '#132149';
@@ -317,7 +376,7 @@
       }
     }
 
-    // snow backdrop particles behind
+    // snow backdrop
     ctx.save();
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = '#ffffff';
@@ -334,7 +393,8 @@
     ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r, 0, Math.PI*2); ctx.fill();
     if(fire.heat>0){
       const pulse = 1 + Math.sin(performance.now()/160)*0.08;
-      ctx.fillStyle = '#ffc97a'; ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r*0.55*pulse, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ffc97a';
+      ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r*0.55*pulse, 0, Math.PI*2); ctx.fill();
       if(fire.embers>0){
         ctx.strokeStyle = 'rgba(255,219,120,0.75)';
         ctx.lineWidth = 3;
@@ -373,7 +433,8 @@
     ctx.fillStyle = '#1c2b53';
     ctx.beginPath(); ctx.arc(player.x-3, player.y-4, 2, 0, Math.PI*2); ctx.fill();
     if(player.hasSpear){
-      ctx.strokeStyle = '#c9f7ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(player.x+10, player.y-2); ctx.lineTo(player.x+28, player.y-4); ctx.stroke();
+      ctx.strokeStyle = '#c9f7ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(player.x+10, player.y-2); ctx.lineTo(player.x+28, player.y-4); ctx.stroke();
     }
 
     ctx.restore();
@@ -381,7 +442,7 @@
     // goal text
     if(!player.hasSpear){
       drawText('木材10で槍クラフト → 白熊撃破で肉確保', BASE_W/2, 60);
-      drawText('焚き火の炎を絶やさないよう木材を自動補充 (Fで手動追加)', BASE_W/2, 84);
+      drawText('焚き火の炎は自動で木材補充される', BASE_W/2, 84);
     } else if(bear.alive){
       drawText('白熊を倒そう！', BASE_W/2, 60);
       drawText('焚き火で温まりつつ戦うと安全', BASE_W/2, 84);
@@ -391,63 +452,40 @@
   }
 
   function drawText(t, x, y){
-    ctx.save(); ctx.font = '16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'white'; ctx.fillText(t, x, y); ctx.restore();
+    ctx.save();
+    ctx.font = '16px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'white';
+    ctx.fillText(t, x, y);
+    ctx.restore();
   }
 
   function restart(){
-    player.x=200; player.y=400; player.hp=100; player.cold=100; player.hasSpear=false; player.atk=10;
+    player.x=200; player.y=400; player.hp=100; player.cold=100; player.hasSpear=false; player.atk=10; player.atkCD=0;
     inv.wood=0; inv.meat=0; ui.bearHud.style.display='none';
     trees.forEach(t=>t.hp = Math.random()<0.5? 30:20);
-    bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; drops.length=0;
+    bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; bear.inv=0;
+    drops.length=0;
     fire.heat = 70; fire.embers = 0;
-    autoChopCooldown = 0; autoFeedCooldown = 0;
     log('再開！');
   }
 
-  // Input helpers for mobile
-  btnAct.addEventListener('touchstart', e=>{ e.preventDefault(); action(); });
-  btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); });
-  btnFeed.addEventListener('touchstart', e=>{ e.preventDefault(); feedFire(false); });
+  // UI buttons
+  btnCraft.addEventListener('click', craftSpear);
+  btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); }, {passive:false});
 
-  if(dpad){
-    const applyDir = (dir, value)=>{
-      if(dir==='up') touchDir.up = value;
-      else if(dir==='down') touchDir.down = value;
-      else if(dir==='left') touchDir.left = value;
-      else if(dir==='right') touchDir.right = value;
-    };
-    dpad.querySelectorAll('button').forEach(btn=>{
-      const dir = btn.dataset.dir;
-      if(!dir) return;
-      const start = e=>{ e.preventDefault(); applyDir(dir, true); };
-      const end = ()=>applyDir(dir, false);
-      btn.addEventListener('touchstart', start, {passive:false});
-      btn.addEventListener('touchend', end);
-      btn.addEventListener('touchcancel', end);
-      btn.addEventListener('mousedown', start);
-      btn.addEventListener('mouseup', end);
-      btn.addEventListener('mouseleave', end);
-    });
-    document.addEventListener('mouseup', ()=>{
-      touchDir.up=false; touchDir.down=false; touchDir.left=false; touchDir.right=false;
-    });
-    document.addEventListener('touchend', ()=>{
-      touchDir.up=false; touchDir.down=false; touchDir.left=false; touchDir.right=false;
-    });
-    document.addEventListener('touchcancel', ()=>{
-      touchDir.up=false; touchDir.down=false; touchDir.left=false; touchDir.right=false;
-    });
-  }
-
-  // game tick
+  // ===== Game Loop =====
   function loop(){
     update();
+
+    // snow update
     for(const flake of snow){
       flake.y += flake.speed;
       flake.x += Math.sin(flake.y*0.04)*flake.drift;
       if(flake.y>world.h){ flake.y = -20; flake.x = Math.random()*world.w; }
       if(flake.x<0) flake.x += world.w; else if(flake.x>world.w) flake.x -= world.w;
     }
+
     draw();
     requestAnimationFrame(loop);
   }
