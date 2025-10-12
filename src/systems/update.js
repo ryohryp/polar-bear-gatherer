@@ -5,7 +5,7 @@ import { clamp, dist } from '../utils.js';
 import { craftSpear, tryAttackBear, tryChopNearestTree, pickupDrops, feedFire } from './actions.js';
 
 export function updateFrame(dt){
-  const { keys, touchDir, stick, player, world, fire, bear, inv } = state;
+  const { keys, stick, player, world, fire, bear, inv } = state;
 
   // === GameOver時は停止（HUD更新のみ） ===
   if (state.gameOver){
@@ -13,10 +13,10 @@ export function updateFrame(dt){
     return;
   }
   // 移動
-  const up = keys.has('w')||keys.has('ArrowUp')||touchDir.up;
-  const dn = keys.has('s')||keys.has('ArrowDown')||touchDir.down;
-  const lt = keys.has('a')||keys.has('ArrowLeft')||touchDir.left;
-  const rt = keys.has('d')||keys.has('ArrowRight')||touchDir.right;
+  const up = keys.has('w')||keys.has('ArrowUp');
+  const dn = keys.has('s')||keys.has('ArrowDown');
+  const lt = keys.has('a')||keys.has('ArrowLeft');
+  const rt = keys.has('d')||keys.has('ArrowRight');
   const sp = player.sp;
 
   let vx=0, vy=0;
