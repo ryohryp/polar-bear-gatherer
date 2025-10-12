@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Polar Bear Gatherer — MVP</title>
+  <style>
+    html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
+    #ui{position:fixed;inset:0;pointer-events:none}
+    .hud{position:absolute;left:12px;top:12px;display:flex;gap:8px;align-items:center}
+    .bar{height:12px;width:120px;background:#1b2744;border-radius:8px;overflow:hidden;border:1px solid #2b3b6a}
+    .bar > i{display:block;height:100%;background:#62b0ff}
+    .tmp i{background:#ff628f}
+    .hp i{background:#65f3a8}
+    .bearhp{position:absolute;left:50%;transform:translateX(-50%);top:12px}
+    .log{position:absolute;left:12px;bottom:12px;background:rgba(10,14,26,.7);border:1px solid #2b3b6a;border-radius:10px;padding:8px 10px;font-size:12px;max-width:70vw}
+    .inv{position:absolute;right:12px;top:12px;background:rgba(10,14,26,.7);border:1px solid #2b3b6a;border-radius:10px;padding:8px 10px;font-size:12px}
+    canvas{display:block;margin:0 auto;image-rendering:pixelated;touch-action:none}
+    .btns{position:absolute;right:12px;bottom:12px;display:flex;gap:8px;pointer-events:auto}
+    .btns button{background:#243357;color:#fff;border:1px solid #2b3b6a;border-radius:10px;padding:10px 12px;font-size:14px}
+    .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;font-size:12px;opacity:.85}
+  </style>
+</head>
+<body>
+  <canvas id="game" width="960" height="540"></canvas>
+  <div id="ui">
+    <div class="hud">
+      <span style="font-weight:600">HP</span>
+      <div class="bar hp"><i id="hpFill" style="width:100%"></i></div>
+      <span style="font-weight:600;margin-left:10px">TEMPERATURE</span>
+      <div class="bar tmp"><i id="tmpFill" style="width:100%"></i></div>
+    </div>
+    <div class="bearhp" id="bearHud" style="display:none">
+      <span style="font-weight:600">BEAR</span>
+      <div class="bar"><i id="bearFill" style="width:100%"></i></div>
+    </div>
+    <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
+    <div class="log" id="log">WASD/矢印で移動、SPACEで伐採/攻撃、Cで槍クラフト。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="btns">
+      <button id="btnAct">伐採/攻撃</button>
+      <button id="btnCraft">槍クラフト</button>
+    </div>
+    <div class="hint">スマホは右下ボタン使用可</div>
+  </div>
+<script>
+(() => {
+  const cvs = document.getElementById('game');
+  const ctx = cvs.getContext('2d');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  const BASE_W = 960, BASE_H = 540;
+  function resize(){
+    const w = Math.min(window.innerWidth, BASE_W);
+    const h = Math.min(window.innerHeight, BASE_H);
+    const scale = Math.min(w/BASE_W, h/BASE_H);
+    cvs.style.width = (BASE_W*scale)|0 + 'px';
+    cvs.style.height = (BASE_H*scale)|0 + 'px';
+  }
+  addEventListener('resize', resize); resize();
+
+  // ===== Data & State =====
+  const keys = new Set();
+  document.addEventListener('keydown', e=>{ keys.add(e.key); });
+  document.addEventListener('keyup', e=>{ keys.delete(e.key); });
+
+  const ui = {
+    hp: document.getElementById('hpFill'),
+    tmp: document.getElementById('tmpFill'),
+    bear: document.getElementById('bearFill'),
+    bearHud: document.getElementById('bearHud'),
+    inv: document.getElementById('inv'),
+    log: document.getElementById('log')
+  };
+  const btnAct = document.getElementById('btnAct');
+  const btnCraft = document.getElementById('btnCraft');
+
+  const world = { w: 2000, h: 1400 };
+  const cam = { x:0, y:0 };
+  const player = { x: 200, y: 400, r: 12, sp: 2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0 };
+  const fire = { x: 220, y: 420, r: 18 };
+
+  // Resource nodes
+  const trees = []; // {x,y,hp}
+  for(let i=0;i<45;i++) trees.push({ x: 300+ Math.random()*1600, y: 200+Math.random()*1000, hp: 30});
+
+  // Bear boss (spawns after craft or when meat goal starts)
+  const bear = { x:1600, y: 900, r: 18, hp: 150, alive:true, aggro:false, inv:0 };
+
+  const drops = []; // {x,y,type:'log'|'meat'}
+
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+  function clamp(v,mi,ma){ return v<mi?mi: v>ma?ma: v; }
+
+  function log(msg){ ui.log.textContent = msg; }
+
+  function craftSpear(){
+    if (inv.wood>=10 && !player.hasSpear){
+      inv.wood -= 10; player.hasSpear = true; player.atk = 22; log('槍をクラフト！攻撃力が上がった');
+      bear.aggro = true; // spawn behavior
+      ui.bearHud.style.display = 'block';
+    } else if (player.hasSpear){
+      log('もう槍は装備済み');
+    } else {
+      log('木材が足りない (10必要)');
+    }
+  }
+
+  const inv = { wood:0, meat:0 };
+
+  function action(){
+    // chop nearest tree within 30
+    let target=null, dmin=1e9;
+    for(const t of trees){
+      if(t.hp>0){
+        const d = Math.hypot(t.x-player.x, t.y-player.y);
+        if(d<dmin){ dmin=d; target=t; }
+      }
+    }
+    if(target && dmin<32){
+      target.hp -= player.hasSpear? 18:10;
+      log('木を伐採中…');
+      if(target.hp<=0){
+        drops.push({x:target.x, y:target.y, type:'log'});
+        log('木を倒した！木材+1');
+      }
+      return;
+    }
+    // attack bear if close
+    if (bear.alive && dist(player,bear)<34 && player.atkCD<=0){
+      const dmg = player.atk; bear.hp -= dmg; player.atkCD=18; ui.bear.style.width = Math.max(0,(bear.hp/150*100))+'%';
+      log('クマに攻撃！ -'+dmg);
+      if (bear.hp<=0){ bear.alive=false; drops.push({x:bear.x,y:bear.y,type:'meat'}); log('白熊を倒した！肉を入手'); ui.bearHud.style.display='none'; }
+      return;
+    }
+    // pickup drops
+    for(let i=drops.length-1;i>=0;i--){
+      const d = Math.hypot(drops[i].x-player.x, drops[i].y-player.y);
+      if(d<28){
+        if(drops[i].type==='log') inv.wood++;
+        else inv.meat++;
+        drops.splice(i,1); log('アイテムを拾った');
+      }
+    }
+  }
+
+  btnAct.addEventListener('click', ()=>action());
+  btnCraft.addEventListener('click', ()=>craftSpear());
+
+  // ===== Main Loop =====
+  function update(){
+    const up = keys.has('w')||keys.has('ArrowUp');
+    const dn = keys.has('s')||keys.has('ArrowDown');
+    const lt = keys.has('a')||keys.has('ArrowLeft');
+    const rt = keys.has('d')||keys.has('ArrowRight');
+    const sp = player.sp;
+    if(up) player.y-=sp; if(dn) player.y+=sp; if(lt) player.x-=sp; if(rt) player.x+=sp;
+    player.x = clamp(player.x, 0, world.w); player.y = clamp(player.y, 0, world.h);
+
+    // temperature & healing near fire
+    const nearFire = dist(player, fire)<60;
+    player.cold += nearFire? 0.20 : -0.06; // warm up or cool down
+    player.cold = clamp(player.cold, 0, 100);
+    if(nearFire && player.hp<100) player.hp += 0.05;
+
+    // bear AI
+    if(bear.alive && bear.aggro){
+      const dx = player.x - bear.x; const dy = player.y - bear.y; const d = Math.hypot(dx,dy);
+      const speed = 1.1 + (player.hasSpear? 0.2:0);
+      if(d>1){ bear.x += dx/d*speed; bear.y += dy/d*speed; }
+      // attack
+      if(d<26 && bear.inv<=0){
+        player.hp -= 8; bear.inv=35; log('クマの攻撃！-8');
+      }
+      if(bear.inv>0) bear.inv--;
+    }
+
+    if(player.atkCD>0) player.atkCD--;
+
+    // death check
+    if(player.cold<=0){ player.hp -= 0.15; }
+    if(player.hp<=0){ player.hp=0; log('力尽きた… Rで再開'); }
+
+    // UI update
+    ui.hp.style.width = (player.hp)+'%';
+    ui.tmp.style.width = (player.cold)+'%';
+    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}`;
+
+    // keyboard actions
+    if(keys.has(' ')||keys.has('Spacebar')){ keys.delete(' '); keys.delete('Spacebar'); action(); }
+    if(keys.has('c')||keys.has('C')){ keys.delete('c'); keys.delete('C'); craftSpear(); }
+    if(keys.has('r')||keys.has('R')){ if(player.hp<=0) restart(); }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,BASE_W,BASE_H);
+    // camera follow
+    cam.x = clamp(player.x - BASE_W/2, 0, world.w-BASE_W);
+    cam.y = clamp(player.y - BASE_H/2, 0, world.h-BASE_H);
+
+    // bg grid snow
+    ctx.fillStyle = '#0e1730';
+    ctx.fillRect(0,0,BASE_W,BASE_H);
+    ctx.save();
+    ctx.translate(-cam.x, -cam.y);
+
+    // snow tiles
+    for(let x=0;x<world.w;x+=80){
+      for(let y=0;y<world.h;y+=80){
+        ctx.fillStyle = '#132149';
+        ctx.fillRect(x,y,78,78);
+      }
+    }
+
+    // fire
+    ctx.fillStyle = '#ff9b3d';
+    ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffc97a'; ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r*0.6, 0, Math.PI*2); ctx.fill();
+
+    // trees
+    for(const t of trees){
+      if(t.hp<=0){
+        ctx.fillStyle = '#7b5b42';
+        ctx.beginPath(); ctx.arc(t.x, t.y, 8, 0, Math.PI*2); ctx.fill(); // stump
+      } else {
+        ctx.fillStyle = '#2e8b57';
+        ctx.beginPath(); ctx.moveTo(t.x, t.y-12); ctx.lineTo(t.x-10, t.y+10); ctx.lineTo(t.x+10, t.y+10); ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // drops
+    for(const d of drops){
+      ctx.fillStyle = d.type==='log'? '#c48b54':'#ff647a';
+      ctx.beginPath(); ctx.arc(d.x,d.y,6,0,Math.PI*2); ctx.fill();
+    }
+
+    // bear
+    if(bear.alive){
+      ctx.fillStyle = '#e6f1ff';
+      ctx.beginPath(); ctx.arc(bear.x, bear.y, bear.r, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#c6d4ff';
+      ctx.beginPath(); ctx.arc(bear.x+6, bear.y-4, 4, 0, Math.PI*2); ctx.fill();
+    }
+
+    // player
+    ctx.fillStyle = player.hasSpear? '#8fe6ff':'#62b0ff';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+    if(player.hasSpear){
+      ctx.strokeStyle = '#c9f7ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(player.x+10, player.y); ctx.lineTo(player.x+26, player.y-2); ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // goal text
+    if(!player.hasSpear){
+      drawText('木材10で槍クラフト → 白熊撃破で肉確保', BASE_W/2, 60);
+    } else if(bear.alive){
+      drawText('白熊を倒そう！', BASE_W/2, 60);
+    } else {
+      drawText('クリア！ 焚き火で温まろう', BASE_W/2, 60);
+    }
+  }
+
+  function drawText(t, x, y){
+    ctx.save(); ctx.font = '16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'white'; ctx.fillText(t, x, y); ctx.restore();
+  }
+
+  function restart(){
+    player.x=200; player.y=400; player.hp=100; player.cold=100; player.hasSpear=false; player.atk=10;
+    inv.wood=0; inv.meat=0; ui.bearHud.style.display='none';
+    trees.forEach(t=>t.hp = Math.random()<0.5? 30:20);
+    bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; drops.length=0; log('再開！');
+  }
+
+  // Input helpers for mobile
+  btnAct.addEventListener('touchstart', e=>{ e.preventDefault(); action(); });
+  btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); });
+
+  // game tick
+  function loop(){ update(); draw(); requestAnimationFrame(loop); }
+  loop();
+})();
+</script>
+</body>
+</html>
