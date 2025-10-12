@@ -38,6 +38,7 @@ import { showGameOver } from './src/ui/hud.js';
       log: document.getElementById('log'),
       btnCraft: document.getElementById('btnCraft'),
       dpad: document.getElementById('dpad'),
+      btnRestart: document.getElementById('btnRestart'),
     }
   });
 
@@ -47,6 +48,16 @@ import { showGameOver } from './src/ui/hud.js';
   // UIイベント
   state.ui.btnCraft.addEventListener('click', craftSpear);
   state.ui.btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); }, {passive:false});
+
+  if (state.ui.btnRestart){
+    const triggerRestart = ()=>{
+      if(!state.gameOver) return;
+      showGameOver(false);
+      restart();
+    };
+    state.ui.btnRestart.addEventListener('click', triggerRestart);
+    state.ui.btnRestart.addEventListener('touchstart', e=>{ e.preventDefault(); triggerRestart(); }, {passive:false});
+  }
 
   // 固定タイムステップループ
   (function(){

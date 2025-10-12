@@ -52,6 +52,10 @@ export function showGameOver(show){
   const el = document.getElementById('gameOver');
   if(!el) return;
   el.style.display = show ? 'flex' : 'none';
+  el.style.pointerEvents = show ? 'auto' : 'none';
+  if(state.ui?.btnRestart){
+    state.ui.btnRestart.disabled = !show;
+  }
   // ゲームオーバー表示中はログを見えるようにしておく
   if (show && state.ui?.log) state.ui.log.style.opacity = '1';
 }
