@@ -20,6 +20,12 @@
     canvas{display:block;margin:0 auto;image-rendering:pixelated;touch-action:none}
     .btns{position:absolute;right:12px;bottom:12px;display:flex;gap:8px;pointer-events:auto}
     .btns button{background:#243357;color:#fff;border:1px solid #2b3b6a;border-radius:10px;padding:10px 12px;font-size:14px}
+    .dpad{position:absolute;left:12px;bottom:12px;display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:8px;pointer-events:auto}
+    .dpad button{background:#243357;color:#fff;border:1px solid #2b3b6a;border-radius:14px;font-size:20px;width:100%;height:100%;touch-action:none}
+    .dpad span{display:block}
+    @media (hover:hover) and (pointer:fine){
+      .dpad{display:none}
+    }
     .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;font-size:12px;opacity:.85}
   </style>
 </head>
@@ -46,12 +52,23 @@
     </div>
     <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
     <div class="log" id="log">WASD/矢印で移動、SPACEで伐採/攻撃、Cで槍クラフト、Fで焚き火に木材。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="dpad" id="dpad">
+      <span></span>
+      <button data-dir="up">↑</button>
+      <span></span>
+      <button data-dir="left">←</button>
+      <button data-dir="down">↓</button>
+      <button data-dir="right">→</button>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
     <div class="btns">
       <button id="btnAct">伐採/攻撃</button>
       <button id="btnCraft">槍クラフト</button>
       <button id="btnFeed">焚き火に木材</button>
     </div>
-    <div class="hint">スマホは右下ボタン使用可</div>
+    <div class="hint">スマホは左下パッドと右下ボタン使用可</div>
   </div>
 <script>
 (() => {
@@ -85,6 +102,8 @@
   const btnAct = document.getElementById('btnAct');
   const btnCraft = document.getElementById('btnCraft');
   const btnFeed = document.getElementById('btnFeed');
+  const dpad = document.getElementById('dpad');
+  const touchDir = { up:false, down:false, left:false, right:false };
 
   const world = { w: 2000, h: 1400 };
   const cam = { x:0, y:0 };
@@ -179,10 +198,10 @@
 
   // ===== Main Loop =====
   function update(){
-    const up = keys.has('w')||keys.has('ArrowUp');
-    const dn = keys.has('s')||keys.has('ArrowDown');
-    const lt = keys.has('a')||keys.has('ArrowLeft');
-    const rt = keys.has('d')||keys.has('ArrowRight');
+    const up = keys.has('w')||keys.has('ArrowUp')||touchDir.up;
+    const dn = keys.has('s')||keys.has('ArrowDown')||touchDir.down;
+    const lt = keys.has('a')||keys.has('ArrowLeft')||touchDir.left;
+    const rt = keys.has('d')||keys.has('ArrowRight')||touchDir.right;
     const sp = player.sp;
     if(up) player.y-=sp; if(dn) player.y+=sp; if(lt) player.x-=sp; if(rt) player.x+=sp;
     player.x = clamp(player.x, 0, world.w); player.y = clamp(player.y, 0, world.h);
@@ -338,6 +357,36 @@
   btnAct.addEventListener('touchstart', e=>{ e.preventDefault(); action(); });
   btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); });
   btnFeed.addEventListener('touchstart', e=>{ e.preventDefault(); feedFire(); });
+
+  if(dpad){
+    const applyDir = (dir, value)=>{
+      if(dir==='up') touchDir.up = value;
+      else if(dir==='down') touchDir.down = value;
+      else if(dir==='left') touchDir.left = value;
+      else if(dir==='right') touchDir.right = value;
+    };
+    dpad.querySelectorAll('button').forEach(btn=>{
+      const dir = btn.dataset.dir;
+      if(!dir) return;
+      const start = e=>{ e.preventDefault(); applyDir(dir, true); };
+      const end = ()=>applyDir(dir, false);
+      btn.addEventListener('touchstart', start, {passive:false});
+      btn.addEventListener('touchend', end);
+      btn.addEventListener('touchcancel', end);
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', end);
+      btn.addEventListener('mouseleave', end);
+    });
+    document.addEventListener('mouseup', ()=>{
+      touchDir.up=false; touchDir.down=false; touchDir.left=false; touchDir.right=false;
+    });
+    document.addEventListener('touchend', ()=>{
+      touchDir.up=false; touchDir.down=false; touchDir.left=false; touchDir.right=false;
+    });
+    document.addEventListener('touchcancel', ()=>{
+      touchDir.up=false; touchDir.down=false; touchDir.left=false; touchDir.right=false;
+    });
+  }
 
   // game tick
   function loop(){
