@@ -7,11 +7,13 @@
   <style>
     html,body{margin:0;height:100%;background:#0b1220;color:#e8efff;font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
     #ui{position:fixed;inset:0;pointer-events:none}
-    .hud{position:absolute;left:12px;top:12px;display:flex;gap:8px;align-items:center}
-    .bar{height:12px;width:120px;background:#1b2744;border-radius:8px;overflow:hidden;border:1px solid #2b3b6a}
+    .hud{position:absolute;left:12px;top:12px;display:flex;gap:14px;align-items:flex-end}
+    .meter{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;letter-spacing:.04em}
+    .bar{height:12px;width:120px;background:#1b2744;border-radius:8px;overflow:hidden;border:1px solid #2b3b6a;box-shadow:0 0 6px rgba(28,43,83,.45) inset}
     .bar > i{display:block;height:100%;background:#62b0ff}
     .tmp i{background:#ff628f}
     .hp i{background:#65f3a8}
+    .fire i{background:linear-gradient(90deg,#ff9b3d,#ffd86a)}
     .bearhp{position:absolute;left:50%;transform:translateX(-50%);top:12px}
     .log{position:absolute;left:12px;bottom:12px;background:rgba(10,14,26,.7);border:1px solid #2b3b6a;border-radius:10px;padding:8px 10px;font-size:12px;max-width:70vw}
     .inv{position:absolute;right:12px;top:12px;background:rgba(10,14,26,.7);border:1px solid #2b3b6a;border-radius:10px;padding:8px 10px;font-size:12px}
@@ -25,20 +27,29 @@
   <canvas id="game" width="960" height="540"></canvas>
   <div id="ui">
     <div class="hud">
-      <span style="font-weight:600">HP</span>
-      <div class="bar hp"><i id="hpFill" style="width:100%"></i></div>
-      <span style="font-weight:600;margin-left:10px">TEMPERATURE</span>
-      <div class="bar tmp"><i id="tmpFill" style="width:100%"></i></div>
+      <div class="meter">
+        <span>HP</span>
+        <div class="bar hp"><i id="hpFill" style="width:100%"></i></div>
+      </div>
+      <div class="meter">
+        <span>温度</span>
+        <div class="bar tmp"><i id="tmpFill" style="width:100%"></i></div>
+      </div>
+      <div class="meter">
+        <span>焚き火</span>
+        <div class="bar fire"><i id="fireFill" style="width:100%"></i></div>
+      </div>
     </div>
     <div class="bearhp" id="bearHud" style="display:none">
       <span style="font-weight:600">BEAR</span>
       <div class="bar"><i id="bearFill" style="width:100%"></i></div>
     </div>
     <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
-    <div class="log" id="log">WASD/矢印で移動、SPACEで伐採/攻撃、Cで槍クラフト。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="log" id="log">WASD/矢印で移動、SPACEで伐採/攻撃、Cで槍クラフト、Fで焚き火に木材。倒木は◎、木は▲。焚き火●で体温回復。</div>
     <div class="btns">
       <button id="btnAct">伐採/攻撃</button>
       <button id="btnCraft">槍クラフト</button>
+      <button id="btnFeed">焚き火に木材</button>
     </div>
     <div class="hint">スマホは右下ボタン使用可</div>
   </div>
@@ -65,6 +76,7 @@
   const ui = {
     hp: document.getElementById('hpFill'),
     tmp: document.getElementById('tmpFill'),
+    fire: document.getElementById('fireFill'),
     bear: document.getElementById('bearFill'),
     bearHud: document.getElementById('bearHud'),
     inv: document.getElementById('inv'),
@@ -72,11 +84,12 @@
   };
   const btnAct = document.getElementById('btnAct');
   const btnCraft = document.getElementById('btnCraft');
+  const btnFeed = document.getElementById('btnFeed');
 
   const world = { w: 2000, h: 1400 };
   const cam = { x:0, y:0 };
   const player = { x: 200, y: 400, r: 12, sp: 2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0 };
-  const fire = { x: 220, y: 420, r: 18 };
+  const fire = { x: 220, y: 420, r: 18, heat: 70, embers:0 };
 
   // Resource nodes
   const trees = []; // {x,y,hp}
@@ -105,6 +118,24 @@
   }
 
   const inv = { wood:0, meat:0 };
+
+  const snow = Array.from({length:120},()=>({
+    x: Math.random()*world.w,
+    y: Math.random()*world.h,
+    r: 1.2+Math.random()*1.4,
+    drift: 0.4+Math.random()*0.6,
+    speed: 0.6+Math.random()*0.8
+  }));
+
+  function feedFire(){
+    if(inv.wood<=0){ log('木材が足りない…'); return; }
+    const near = dist(player, fire)<50;
+    if(!near){ log('焚き火に近づこう'); return; }
+    inv.wood--;
+    fire.heat = clamp(fire.heat + 18, 0, 100);
+    fire.embers = 60;
+    log('焚き火をくべた！温度が上昇');
+  }
 
   function action(){
     // chop nearest tree within 30
@@ -144,6 +175,7 @@
 
   btnAct.addEventListener('click', ()=>action());
   btnCraft.addEventListener('click', ()=>craftSpear());
+  btnFeed.addEventListener('click', ()=>feedFire());
 
   // ===== Main Loop =====
   function update(){
@@ -156,10 +188,14 @@
     player.x = clamp(player.x, 0, world.w); player.y = clamp(player.y, 0, world.h);
 
     // temperature & healing near fire
-    const nearFire = dist(player, fire)<60;
-    player.cold += nearFire? 0.20 : -0.06; // warm up or cool down
+    const nearFire = dist(player, fire)<60 && fire.heat>0;
+    player.cold += nearFire? 0.25 + fire.heat*0.004 : -(0.04 + (100-fire.heat)*0.0006);
     player.cold = clamp(player.cold, 0, 100);
-    if(nearFire && player.hp<100) player.hp += 0.05;
+    if(nearFire && player.hp<100) player.hp += 0.06;
+    player.hp = clamp(player.hp, 0, 100);
+
+    fire.heat = clamp(fire.heat - 0.018, 0, 100);
+    if(fire.embers>0) fire.embers--;
 
     // bear AI
     if(bear.alive && bear.aggro){
@@ -182,11 +218,13 @@
     // UI update
     ui.hp.style.width = (player.hp)+'%';
     ui.tmp.style.width = (player.cold)+'%';
-    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}`;
+    ui.fire.style.width = (fire.heat)+'%';
+    ui.inv.innerHTML = `木材: ${inv.wood} / 10で槍クラフト [C]<br>肉: ${inv.meat}<br>焚き火はFでくべる`; 
 
     // keyboard actions
     if(keys.has(' ')||keys.has('Spacebar')){ keys.delete(' '); keys.delete('Spacebar'); action(); }
     if(keys.has('c')||keys.has('C')){ keys.delete('c'); keys.delete('C'); craftSpear(); }
+    if(keys.has('f')||keys.has('F')){ keys.delete('f'); keys.delete('F'); feedFire(); }
     if(keys.has('r')||keys.has('R')){ if(player.hp<=0) restart(); }
   }
 
@@ -210,10 +248,30 @@
       }
     }
 
+    // snow backdrop particles behind
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#ffffff';
+    for(const flake of snow){
+      const sx = flake.x - cam.x;
+      const sy = flake.y - cam.y;
+      if(sx<-20 || sx>BASE_W+20 || sy<-20 || sy>BASE_H+20) continue;
+      ctx.beginPath(); ctx.arc(flake.x, flake.y, flake.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+
     // fire
-    ctx.fillStyle = '#ff9b3d';
+    ctx.fillStyle = fire.heat>0? '#ff9b3d':'#3a3a4a';
     ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#ffc97a'; ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r*0.6, 0, Math.PI*2); ctx.fill();
+    if(fire.heat>0){
+      const pulse = 1 + Math.sin(performance.now()/160)*0.08;
+      ctx.fillStyle = '#ffc97a'; ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r*0.55*pulse, 0, Math.PI*2); ctx.fill();
+      if(fire.embers>0){
+        ctx.strokeStyle = 'rgba(255,219,120,0.75)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r+fire.embers*0.03, 0, Math.PI*2); ctx.stroke();
+      }
+    }
 
     // trees
     for(const t of trees){
@@ -243,8 +301,10 @@
     // player
     ctx.fillStyle = player.hasSpear? '#8fe6ff':'#62b0ff';
     ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1c2b53';
+    ctx.beginPath(); ctx.arc(player.x-3, player.y-4, 2, 0, Math.PI*2); ctx.fill();
     if(player.hasSpear){
-      ctx.strokeStyle = '#c9f7ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(player.x+10, player.y); ctx.lineTo(player.x+26, player.y-2); ctx.stroke();
+      ctx.strokeStyle = '#c9f7ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(player.x+10, player.y-2); ctx.lineTo(player.x+28, player.y-4); ctx.stroke();
     }
 
     ctx.restore();
@@ -252,8 +312,10 @@
     // goal text
     if(!player.hasSpear){
       drawText('木材10で槍クラフト → 白熊撃破で肉確保', BASE_W/2, 60);
+      drawText('焚き火の炎を絶やさないよう木材をくべよう [F]', BASE_W/2, 84);
     } else if(bear.alive){
       drawText('白熊を倒そう！', BASE_W/2, 60);
+      drawText('焚き火で温まりつつ戦うと安全', BASE_W/2, 84);
     } else {
       drawText('クリア！ 焚き火で温まろう', BASE_W/2, 60);
     }
@@ -267,15 +329,28 @@
     player.x=200; player.y=400; player.hp=100; player.cold=100; player.hasSpear=false; player.atk=10;
     inv.wood=0; inv.meat=0; ui.bearHud.style.display='none';
     trees.forEach(t=>t.hp = Math.random()<0.5? 30:20);
-    bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; drops.length=0; log('再開！');
+    bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; drops.length=0;
+    fire.heat = 70; fire.embers = 0;
+    log('再開！');
   }
 
   // Input helpers for mobile
   btnAct.addEventListener('touchstart', e=>{ e.preventDefault(); action(); });
   btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); });
+  btnFeed.addEventListener('touchstart', e=>{ e.preventDefault(); feedFire(); });
 
   // game tick
-  function loop(){ update(); draw(); requestAnimationFrame(loop); }
+  function loop(){
+    update();
+    for(const flake of snow){
+      flake.y += flake.speed;
+      flake.x += Math.sin(flake.y*0.04)*flake.drift;
+      if(flake.y>world.h){ flake.y = -20; flake.x = Math.random()*world.w; }
+      if(flake.x<0) flake.x += world.w; else if(flake.x>world.w) flake.x -= world.w;
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
   loop();
 })();
 </script>
