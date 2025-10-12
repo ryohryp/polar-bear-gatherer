@@ -11,11 +11,16 @@ import { showGameOver } from './src/ui/hud.js';
   const cvs = document.getElementById('game');
   const ctx = cvs.getContext('2d');
   function resize(){
-    const w = Math.min(window.innerWidth, BASE_W);
-    const h = Math.min(window.innerHeight, BASE_H);
-    const scale = Math.min(w/BASE_W, h/BASE_H);
-    cvs.style.width = (BASE_W*scale|0) + 'px';
-    cvs.style.height = (BASE_H*scale|0) + 'px';
+    const safeTop = 0;
+    const safeBottom = 0;
+    const availH = Math.max(0, window.innerHeight - safeTop - safeBottom);
+    const scaleH = availH / BASE_H;
+    const scaleW = window.innerWidth / BASE_W;
+    const scale = Math.min(scaleH, scaleW);
+    const cssW = Math.floor(BASE_W * scale);
+    const cssH = Math.floor(BASE_H * scale);
+    cvs.style.width = cssW + 'px';
+    cvs.style.height = cssH + 'px';
   }
   addEventListener('resize', resize); resize();
 
