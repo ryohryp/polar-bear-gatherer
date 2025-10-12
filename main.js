@@ -11,16 +11,31 @@ import { showGameOver } from './src/ui/hud.js';
   const cvs = document.getElementById('game');
   const ctx = cvs.getContext('2d');
   function resize(){
-    const safeTop = 0;
-    const safeBottom = 0;
-    const availH = Math.max(0, window.innerHeight - safeTop - safeBottom);
-    const scaleH = availH / BASE_H;
-    const scaleW = window.innerWidth / BASE_W;
-    const scale = Math.min(scaleH, scaleW);
-    const cssW = Math.floor(BASE_W * scale);
-    const cssH = Math.floor(BASE_H * scale);
-    cvs.style.width = cssW + 'px';
-    cvs.style.height = cssH + 'px';
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = window.innerWidth;
+    const cssHeight = window.innerHeight;
+    const width = Math.max(1, Math.round(cssWidth * dpr));
+    const height = Math.max(1, Math.round(cssHeight * dpr));
+
+    if (cvs.width !== width || cvs.height !== height){
+      cvs.width = width;
+      cvs.height = height;
+    }
+
+    const rawScale = Math.min(width / BASE_W, height / BASE_H);
+    const scale = rawScale > 0 ? rawScale : 1;
+    const offsetX = width > 0 ? (width - BASE_W * scale) * 0.5 : 0;
+    const offsetY = height > 0 ? (height - BASE_H * scale) * 0.5 : 0;
+
+    state.screen.width = width;
+    state.screen.height = height;
+    state.screen.scale = scale;
+    state.screen.offsetX = offsetX;
+    state.screen.offsetY = offsetY;
+    state.screen.dpr = dpr;
+
+    cvs.style.width = cssWidth + 'px';
+    cvs.style.height = cssHeight + 'px';
   }
   addEventListener('resize', resize); resize();
 

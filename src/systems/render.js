@@ -4,9 +4,17 @@ import { clamp } from '../utils.js';
 import { BASE_W, BASE_H } from '../config.js';
 
 export function renderFrame(alpha){
-  const { ctx, cam, world, fire, trees, drops, bear, player, snow } = state;
+  const { ctx, cam, world, fire, trees, drops, bear, player, snow, screen } = state;
+  const { width, height, scale, offsetX, offsetY } = screen;
 
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0, 0, width || BASE_W, height || BASE_H);
+  ctx.fillStyle = '#0e1730';
+  ctx.fillRect(0, 0, width || BASE_W, height || BASE_H);
+
+  ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
   ctx.clearRect(0,0,BASE_W,BASE_H);
+
   // camera
   cam.x = clamp(player.x - BASE_W/2, 0, world.w-BASE_W);
   cam.y = clamp(player.y - BASE_H/2, 0, world.h-BASE_H);
@@ -99,6 +107,8 @@ export function renderFrame(alpha){
   } else {
     drawText(t('goal.clear'), BASE_W/2, 60);
   }
+
+  ctx.setTransform(1,0,0,1,0,0);
 }
 
 function drawText(t, x, y){

@@ -6,6 +6,14 @@ export const state = {
   canvas: null,
   ctx: null,
   ui: null,
+  screen: {
+    width: 0,
+    height: 0,
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    dpr: 1,
+  },
 
   // 入力（キーボード / ドラッグターゲット）
   keys: new Set(),

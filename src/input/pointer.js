@@ -4,8 +4,15 @@ import { clamp } from '../utils.js';
 
 function toWorldCoords(clientX, clientY){
   const rect = state.canvas.getBoundingClientRect();
-  const sx = (clientX - rect.left) * (BASE_W / rect.width);
-  const sy = (clientY - rect.top) * (BASE_H / rect.height);
+  const { screen } = state;
+  const dpr = screen?.dpr || (window.devicePixelRatio || 1);
+  const scale = screen?.scale || 1;
+  const offsetX = screen?.offsetX || 0;
+  const offsetY = screen?.offsetY || 0;
+  const px = (clientX - rect.left) * dpr;
+  const py = (clientY - rect.top) * dpr;
+  const sx = (px - offsetX) / scale;
+  const sy = (py - offsetY) / scale;
   return {
     x: clamp(sx + state.cam.x, 0, state.world.w),
     y: clamp(sy + state.cam.y, 0, state.world.h)
