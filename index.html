@@ -51,7 +51,7 @@
       <div class="bar"><i id="bearFill" style="width:100%"></i></div>
     </div>
     <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
-    <div class="log" id="log">画面長押しで移動。Cで槍クラフト。伐採・攻撃・焚き火への木材投入は自動。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="log" id="log">画面ドラッグで移動。Cで槍クラフト。伐採・攻撃・焚き火への木材投入は自動。倒木は◎、木は▲。焚き火●で体温回復。</div>
     <div class="dpad" id="dpad">
       <span></span>
       <button data-dir="up">↑</button>
@@ -66,7 +66,7 @@
     <div class="btns">
       <button id="btnCraft">槍クラフト</button>
     </div>
-    <div class="hint">画面を長押しで移動／伐採・攻撃・焚き火投入は自動</div>
+    <div class="hint">画面をドラッグで移動／伐採・攻撃・焚き火投入は自動</div>
   </div>
 
 <script>
@@ -216,35 +216,57 @@
   function startMoveTo(x,y){ moveTarget.active=true; moveTarget.x=x; moveTarget.y=y; }
   function stopMove(){ moveTarget.active=false; }
 
-  // Pointer handlers（長押し＆ドラッグで追従）
+  // ===== Drag-to-move only (no long-press) =====
+  const DRAG_THRESHOLD = 12; // px（画面座標）
+  const dragState = { active:false, started:false, startX:0, startY:0 };
+
+  // Touch
   cvs.addEventListener('touchstart', e => {
+    if (e.touches.length === 0) return;
     e.preventDefault();
     const t = e.touches[0];
-    const p = toWorldCoords(t.clientX, t.clientY);
-    startMoveTo(p.x, p.y);
+    dragState.active = true;
+    dragState.started = false;
+    dragState.startX = t.clientX;
+    dragState.startY = t.clientY;
   }, { passive:false });
 
   cvs.addEventListener('touchmove', e => {
+    if (!dragState.active) return;
     e.preventDefault();
-    if (!moveTarget.active) return;
     const t = e.touches[0];
-    const p = toWorldCoords(t.clientX, t.clientY);
-    startMoveTo(p.x, p.y);
+    const dx = t.clientX - dragState.startX;
+    const dy = t.clientY - dragState.startY;
+    const moved = Math.hypot(dx, dy);
+    if (!dragState.started && moved > DRAG_THRESHOLD) dragState.started = true;
+    if (dragState.started) {
+      const p = toWorldCoords(t.clientX, t.clientY);
+      startMoveTo(p.x, p.y);
+    }
   }, { passive:false });
 
-  cvs.addEventListener('touchend', stopMove, { passive:true });
-  cvs.addEventListener('touchcancel', stopMove, { passive:true });
+  cvs.addEventListener('touchend', () => { dragState.active=false; dragState.started=false; stopMove(); }, { passive:true });
+  cvs.addEventListener('touchcancel', () => { dragState.active=false; dragState.started=false; stopMove(); }, { passive:true });
 
+  // Mouse
   cvs.addEventListener('mousedown', e => {
-    const p = toWorldCoords(e.clientX, e.clientY);
-    startMoveTo(p.x, p.y);
+    dragState.active = true;
+    dragState.started = false;
+    dragState.startX = e.clientX;
+    dragState.startY = e.clientY;
   });
   cvs.addEventListener('mousemove', e => {
-    if (!moveTarget.active) return;
-    const p = toWorldCoords(e.clientX, e.clientY);
-    startMoveTo(p.x, p.y);
+    if (!dragState.active) return;
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    const moved = Math.hypot(dx, dy);
+    if (!dragState.started && moved > DRAG_THRESHOLD) dragState.started = true;
+    if (dragState.started) {
+      const p = toWorldCoords(e.clientX, e.clientY);
+      startMoveTo(p.x, p.y);
+    }
   });
-  document.addEventListener('mouseup', stopMove);
+  document.addEventListener('mouseup', () => { dragState.active=false; dragState.started=false; stopMove(); });
 
   // D-Pad（任意：PCや外付けコントローラ用に残す）
   if(dpad){
