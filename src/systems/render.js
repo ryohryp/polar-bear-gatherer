@@ -2,6 +2,61 @@ import { state } from '../state.js';
 import { t } from '../ui/messages.js';
 import { clamp } from '../utils.js';
 import { BASE_W, BASE_H } from '../config.js';
+// src/systems/render.js
+import { SPRITES } from '../config.js';
+
+const playerSprite = {
+   img: new Image(),
+   ready: false,
+   frameW: 0,
+   frameH: 0
+ };
+ playerSprite.img.onload = () => {
+  const cfg = SPRITES.player;
+  // 画像実寸から自動算出（384x96 → 64x96）
+  playerSprite.frameW = Math.floor(playerSprite.img.width  / cfg.cols);
+  playerSprite.frameH = Math.floor(playerSprite.img.height / cfg.rows);
+  playerSprite.ready = true;
+  console.info('[sprite] player loaded',
+    playerSprite.img.width, 'x', playerSprite.img.height,
+    '=> cell', playerSprite.frameW, 'x', playerSprite.frameH);
+ };
+ playerSprite.img.src = SPRITES.player.src;
+
+// --- 方向マッピング（6方向シート対応）---
+// 0:前, 1:左下, 2:右上, 3:後ろ, 4:右下, 5:右
+const DIR_TO_CELL = [
+  {c:0,r:0}, // 下（前）
+  {c:4,r:0}, // 右下（右前）
+  {c:5,r:0}, // 右
+  {c:3,r:0}, // 上（後ろ）
+  {c:1,r:0}, // 左
+  {c:1,r:0}, // 左下（左前）
+];
+
+// dir範囲を6に丸める（7,8方向入力でも最も近い方向へ丸める）
+function getCellForDir(dir){
+  return DIR_TO_CELL[dir % DIR_TO_CELL.length] || DIR_TO_CELL[0];
+}
+
+export function drawPlayer(ctx, player) {
+   if (!playerSprite.ready) return;
+   const fw = playerSprite.frameW;
+   const fh = playerSprite.frameH;
+   const dir = Math.max(0, Math.min(7, player.dir|0));
+   const cell = getCellForDir(dir);
+   const sx = cell.c * fw;
+   const sy = cell.r * fh;
+   // まずはワールド→スクリーン変換無しで中央付近に確実表示
+   const dx = Math.floor(player.x - fw/2);
+   const dy = Math.floor(player.y - fh/2);
+   ctx.drawImage(playerSprite.img, sx, sy, fw, fh, dx, dy, fw, fh);
+
+
+  // もし見えない場合の切り分け用：スプライトシート全体を左上に小さく表示
+  // （一時的な可視化。表示されたら削除OK）
+  // removed debug: sheet preview at top-left
+ }
 
 export function renderFrame(alpha){
   const { ctx, cam, world, fire, trees, drops, bear, player, snow, screen, game } = state;
@@ -86,15 +141,8 @@ export function renderFrame(alpha){
     ctx.beginPath(); ctx.arc(bear.x+6, bear.y-4, 4, 0, Math.PI*2); ctx.fill();
   }
 
-  // player
-  ctx.fillStyle = player.hasSpear? '#8fe6ff':'#62b0ff';
-  ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#1c2b53';
-  ctx.beginPath(); ctx.arc(player.x-3, player.y-4, 2, 0, Math.PI*2); ctx.fill();
-  if(player.hasSpear){
-    ctx.strokeStyle = '#c9f7ff'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(player.x+10, player.y-2); ctx.lineTo(player.x+28, player.y-4); ctx.stroke();
-  }
+  // player (use sprite instead of placeholder shapes)
+  drawPlayer(ctx, player);
 
   ctx.restore();
 
