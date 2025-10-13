@@ -29,6 +29,8 @@ export function updateFrame(dt){
     if(lt) vx -= sp;
     if(rt) vx += sp;
   }
+  // update facing direction from current movement vector
+  updatePlayerDir(player, vx, vy);
   player.x = clamp(player.x + vx, 0, world.w);
   player.y = clamp(player.y + vy, 0, world.h);
 
@@ -98,4 +100,20 @@ export function updateFrame(dt){
     if(flake.y>state.world.h){ flake.y = -20; flake.x = Math.random()*state.world.w; }
     if(flake.x<0) flake.x += state.world.w; else if(flake.x>state.world.w) flake.x -= state.world.w;
   }
+}
+
+// src/systems/update.js
+export function updatePlayerDir(player, vx, vy) {
+  if (vx === 0 && vy === 0) return;
+
+  const angle = Math.atan2(vy, vx);
+  const deg = (angle * 180 / Math.PI + 360) % 360;
+
+  // --- 6方向シート用に丸めた角度分割 ---
+  if (deg >= 330 || deg < 30) player.dir = 2;          // 右
+  else if (deg < 90) player.dir = 1;                   // 右下
+  else if (deg < 150) player.dir = 0;                  // 下
+  else if (deg < 210) player.dir = 5;                  // 左下
+  else if (deg < 270) player.dir = 4;                  // 左
+  else player.dir = 3;                                 // 上
 }
