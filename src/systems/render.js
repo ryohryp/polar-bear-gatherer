@@ -4,8 +4,9 @@ import { clamp } from '../utils.js';
 import { BASE_W, BASE_H } from '../config.js';
 
 export function renderFrame(alpha){
-  const { ctx, cam, world, fire, trees, drops, bear, player, snow, screen } = state;
+  const { ctx, cam, world, fire, trees, drops, bear, player, snow, screen, game } = state;
   const { width, height, scale, offsetX, offsetY } = screen;
+  const frameNow = performance.now();
 
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0, 0, width || BASE_W, height || BASE_H);
@@ -50,7 +51,7 @@ export function renderFrame(alpha){
   ctx.fillStyle = fire.heat>0? '#ff9b3d':'#3a3a4a';
   ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r, 0, Math.PI*2); ctx.fill();
   if(fire.heat>0){
-    const pulse = 1 + Math.sin(performance.now()/160)*0.08;
+    const pulse = 1 + Math.sin(frameNow/160)*0.08;
     ctx.fillStyle = '#ffc97a';
     ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r*0.55*pulse, 0, Math.PI*2); ctx.fill();
     if(fire.embers>0){
@@ -109,6 +110,11 @@ export function renderFrame(alpha){
   }
 
   ctx.setTransform(1,0,0,1,0,0);
+  if(game.flags.modeOrderRush){
+    drawOrdersHud(frameNow);
+    drawStationsHud(frameNow);
+    drawInventoryHud();
+  }
 }
 
 function drawText(t, x, y){
@@ -118,5 +124,123 @@ function drawText(t, x, y){
   ctx.textAlign = 'center';
   ctx.fillStyle = 'white';
   ctx.fillText(t, x, y);
+  ctx.restore();
+}
+
+function drawOrdersHud(now){
+  const { ctx, screen, game } = state;
+  if(!game.orders || game.orders.length===0){
+    return;
+  }
+  ctx.save();
+  ctx.translate(screen.offsetX, screen.offsetY);
+  ctx.scale(screen.scale, screen.scale);
+  const width = 208;
+  const height = 54;
+  const gap = 10;
+  let y = 112;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  for(const order of game.orders){
+    ctx.fillStyle = order.status === 'fail'
+      ? 'rgba(200,64,96,0.4)'
+      : order.status === 'done'
+        ? 'rgba(72,180,128,0.42)'
+        : 'rgba(20,36,64,0.78)';
+    ctx.fillRect(16, y, width, height);
+    ctx.strokeStyle = 'rgba(86,122,196,0.65)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(16, y, width, height);
+
+    ctx.fillStyle = '#e4edff';
+    ctx.fillText(`#${order.id} 槍 ${order.progress}/${order.need.spear}`, 24, y + 18);
+    const reward = order.need.spear * game.orderConfig.rewardPerSpear;
+    ctx.fillText(`報酬 +${reward}c`, 24, y + 36);
+
+    const barX = 24;
+    const barY = y + height - 12;
+    const barW = width - 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(barX, barY, barW, 6);
+    let ratio = 0;
+    if(order.status === 'active'){
+      const remain = order.expiresAt - now;
+      ratio = clamp(order.duration > 0 ? remain / order.duration : 0, 0, 1);
+      ctx.fillStyle = '#ff9460';
+    } else if(order.status === 'done'){
+      ratio = 1;
+      ctx.fillStyle = '#6df3a6';
+    } else {
+      ratio = 0;
+      ctx.fillStyle = '#ff6384';
+    }
+    ctx.fillRect(barX, barY, barW * ratio, 6);
+
+    y += height + gap;
+  }
+  ctx.restore();
+}
+
+function drawStationsHud(now){
+  const { ctx, screen, game } = state;
+  ctx.save();
+  ctx.translate(screen.offsetX, screen.offsetY);
+  ctx.scale(screen.scale, screen.scale);
+  const stations = [
+    { key:'gather', label:'GATHER', color:'#66c0ff' },
+    { key:'craft', label:'CRAFT', color:'#7be27f' },
+    { key:'trap', label:'TRAP', color:'#ffb366' },
+  ];
+  const boxW = 180;
+  const boxH = 60;
+  const gap = 14;
+  const total = stations.length * boxW + (stations.length - 1) * gap;
+  const startX = (BASE_W - total) / 2;
+  const y = BASE_H - 82;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  stations.forEach((info, idx)=>{
+    const st = game.stations[info.key];
+    if(!st) return;
+    const x = startX + idx * (boxW + gap);
+    ctx.fillStyle = 'rgba(16,28,52,0.82)';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = 'rgba(86,122,196,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, boxW, boxH);
+
+    ctx.fillStyle = '#e0ecff';
+    ctx.fillText(info.label, x + 12, y + 18);
+    ctx.fillText(`Lv.${st.level}`, x + 12, y + 36);
+    ctx.fillText(`待ち: ${st.queue}`, x + 12, y + 52);
+
+    const barX = x + 90;
+    const barY = y + boxH - 16;
+    const barW = boxW - 102;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(barX, barY, barW, 8);
+    if(st.busyUntil > now && st.workDuration > 0){
+      const ratio = clamp(1 - (st.busyUntil - now) / st.workDuration, 0, 1);
+      ctx.fillStyle = info.color;
+      ctx.fillRect(barX, barY, barW * ratio, 8);
+    }
+  });
+  ctx.restore();
+}
+
+function drawInventoryHud(){
+  const { ctx, screen, game } = state;
+  if(!game.inventory) return;
+  ctx.save();
+  ctx.translate(screen.offsetX, screen.offsetY);
+  ctx.scale(screen.scale, screen.scale);
+  const x = BASE_W - 16;
+  let y = 112;
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#e8f2ff';
+  ctx.fillText(`Coins: ${game.coins}`, x, y);
+  y += 18;
+  ctx.fillText(`Wood: ${game.inventory.wood} / Spear: ${game.inventory.spear}`, x, y);
   ctx.restore();
 }

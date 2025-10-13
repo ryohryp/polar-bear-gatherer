@@ -1,82 +1,72 @@
-import { BASE_W, BASE_H, STICK } from '../config.js';
+import { DRAG_THRESHOLD } from '../config.js';
 import { state } from '../state.js';
-import { clamp } from '../utils.js';
 
-function toWorldCoords(clientX, clientY){
+function toCanvasCoords(e){
   const rect = state.canvas.getBoundingClientRect();
-  const { screen } = state;
-  const dpr = screen?.dpr || (window.devicePixelRatio || 1);
-  const scale = screen?.scale || 1;
-  const offsetX = screen?.offsetX || 0;
-  const offsetY = screen?.offsetY || 0;
-  const px = (clientX - rect.left) * dpr;
-  const py = (clientY - rect.top) * dpr;
-  const sx = (px - offsetX) / scale;
-  const sy = (py - offsetY) / scale;
   return {
-    x: clamp(sx + state.cam.x, 0, state.world.w),
-    y: clamp(sy + state.cam.y, 0, state.world.h)
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
   };
 }
 
-function startStick(x, y){
-  const s = state.stick;
-  s.active = true;
-  s.originX = s.curX = x;
-  s.originY = s.curY = y;
-  s.dirX = 0; s.dirY = 0;
-}
-function updateStick(x, y){
-  const s = state.stick;
-  if (!s.active) return;
-  s.curX = x; s.curY = y;
-  const dx = s.curX - s.originX;
-  const dy = s.curY - s.originY;
-  const len = Math.hypot(dx, dy);
-  if (len <= STICK.DEADZONE){
-    s.dirX = 0; s.dirY = 0;
-    return;
-  }
-  const clampLen = Math.min(len, STICK.MAX_RADIUS);
-  const nx = dx / (clampLen || 1);
-  const ny = dy / (clampLen || 1);
-  s.dirX = nx;
-  s.dirY = ny;
-}
-function endStick(){
-  const s = state.stick;
-  s.active = false;
-  s.dirX = 0; s.dirY = 0;
+function stopDrag(){
+  const drag = state.input.drag;
+  drag.active = false;
+  drag.pointerId = null;
+  drag.moved = false;
+  drag.dirX = 0;
+  drag.dirY = 0;
 }
 
 export function attachPointer(){
   const cvs = state.canvas;
+  const drag = state.input.drag;
+  const threshold = DRAG_THRESHOLD ?? 8;
 
-  // Touch（タップ起点 → ドラッグ方向ベクトル）
-  cvs.addEventListener('touchstart', e => {
-    if (e.touches.length === 0) return;
-    e.preventDefault();
-    const t = e.touches[0];
-    startStick(t.clientX, t.clientY);
-  }, { passive:false });
+  const handleDown = (e)=>{
+    if(e.pointerType === 'mouse' && e.button !== 0) return;
+    const { x, y } = toCanvasCoords(e);
+    drag.active = true;
+    drag.pointerId = e.pointerId;
+    drag.moved = false;
+    drag.startX = drag.lastX = x;
+    drag.startY = drag.lastY = y;
+    drag.dirX = 0;
+    drag.dirY = 0;
+    if (cvs.setPointerCapture) cvs.setPointerCapture(e.pointerId);
+  };
 
-  cvs.addEventListener('touchmove', e => {
-    e.preventDefault();
-    const t = e.touches[0];
-    updateStick(t.clientX, t.clientY);
-  }, { passive:false });
+  const handleMove = (e)=>{
+    if(!drag.active || drag.pointerId !== e.pointerId) return;
+    const { x, y } = toCanvasCoords(e);
+    const dx = x - drag.startX;
+    const dy = y - drag.startY;
+    if(!drag.moved && (dx*dx + dy*dy) >= threshold*threshold){
+      drag.moved = true;
+    }
+    if(drag.moved){
+      const len = Math.hypot(dx, dy) || 1;
+      drag.dirX = dx / len;
+      drag.dirY = dy / len;
+    } else {
+      drag.dirX = 0;
+      drag.dirY = 0;
+    }
+    drag.lastX = x;
+    drag.lastY = y;
+  };
 
-  cvs.addEventListener('touchend',   () => { endStick(); }, { passive:true });
-  cvs.addEventListener('touchcancel',() => { endStick(); }, { passive:true });
+  const handleUp = (e)=>{
+    if(drag.pointerId !== null && e.pointerId !== drag.pointerId) return;
+    stopDrag();
+    if (cvs.releasePointerCapture) cvs.releasePointerCapture(e.pointerId);
+  };
 
-  // Mouse（PCでも同様操作）
-  cvs.addEventListener('mousedown', e => {
-    startStick(e.clientX, e.clientY);
-  });
-  cvs.addEventListener('mousemove', e => {
-    updateStick(e.clientX, e.clientY);
-  });
-  document.addEventListener('mouseup', () => { endStick(); });
+  cvs.addEventListener('pointerdown', handleDown, { passive:true });
+  window.addEventListener('pointermove', handleMove, { passive:true });
+  window.addEventListener('pointerup', handleUp, { passive:true });
+  window.addEventListener('pointercancel', handleUp, { passive:true });
+  window.addEventListener('pointerout', handleUp, { passive:true });
 
   // C キー（クラフト）ショートカット
   document.addEventListener('keydown', e=>{

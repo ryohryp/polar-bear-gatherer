@@ -84,3 +84,23 @@ export function pickupDrops(source='manual'){
   if(picked){ log(source==='auto' ? 'アイテムを拾った（自動）' : 'アイテムを拾った'); return true; }
   return false;
 }
+
+export function buyUpgrade(step){
+  const station = state.game?.stations?.[step];
+  if(!station) return false;
+  const cost = 20 * station.level;
+  if(state.game.coins < cost){
+    log(`コイン不足… (${cost}c必要)`);
+    return false;
+  }
+  state.game.coins -= cost;
+  station.level += 1;
+  log(`${step.toUpperCase()} Lv.${station.level} に強化！`);
+  return true;
+}
+
+export function applyOrderPenalty(amount = 0){
+  const dmg = Math.max(2, Math.round(amount * 0.5));
+  state.player.hp = clamp(state.player.hp - dmg, 0, 100);
+  log(`注文遅延で士気低下 -${dmg}`);
+}

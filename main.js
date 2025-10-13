@@ -3,7 +3,7 @@ import { state, initState, restart } from './src/state.js';
 import { attachPointer } from './src/input/pointer.js';
 import { updateFrame } from './src/systems/update.js';
 import { renderFrame } from './src/systems/render.js';
-import { craftSpear } from './src/systems/actions.js';
+import { craftSpear, buyUpgrade } from './src/systems/actions.js';
 import { showGameOver } from './src/ui/hud.js';
 
 (() => {
@@ -52,6 +52,7 @@ import { showGameOver } from './src/ui/hud.js';
       inv: document.getElementById('inv'),
       log: document.getElementById('log'),
       btnCraft: document.getElementById('btnCraft'),
+      btnUpgradeCraft: document.getElementById('btnUpgradeCraft'),
       btnRestart: document.getElementById('btnRestart'),
     }
   });
@@ -62,6 +63,12 @@ import { showGameOver } from './src/ui/hud.js';
   // UIイベント
   state.ui.btnCraft.addEventListener('click', craftSpear);
   state.ui.btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); }, {passive:false});
+
+  if(state.ui.btnUpgradeCraft){
+    const triggerUpgrade = ()=>{ buyUpgrade('craft'); };
+    state.ui.btnUpgradeCraft.addEventListener('click', triggerUpgrade);
+    state.ui.btnUpgradeCraft.addEventListener('touchstart', e=>{ e.preventDefault(); triggerUpgrade(); }, {passive:false});
+  }
 
   if (state.ui.btnRestart){
     const triggerRestart = ()=>{
