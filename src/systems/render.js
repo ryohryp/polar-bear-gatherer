@@ -6,57 +6,75 @@ import { BASE_W, BASE_H } from '../config.js';
 import { SPRITES } from '../config.js';
 
 const playerSprite = {
-   img: new Image(),
-   ready: false,
-   frameW: 0,
-   frameH: 0
- };
- playerSprite.img.onload = () => {
+  img: new Image(),
+  ready: false,
+  frameW: 0,
+  frameH: 0
+};
+playerSprite.img.onload = () => {
   const cfg = SPRITES.player;
-  // 画像実寸から自動算出（384x96 → 64x96）
+  // 画像実寸から自動算出（512x512 / 4x4 想定）
   playerSprite.frameW = Math.floor(playerSprite.img.width  / cfg.cols);
   playerSprite.frameH = Math.floor(playerSprite.img.height / cfg.rows);
   playerSprite.ready = true;
   console.info('[sprite] player loaded',
     playerSprite.img.width, 'x', playerSprite.img.height,
     '=> cell', playerSprite.frameW, 'x', playerSprite.frameH);
- };
- playerSprite.img.src = SPRITES.player.src;
+};
+playerSprite.img.src = SPRITES.player.src;
 
-// --- 方向マッピング（6方向シート対応）---
-// 0:前, 1:左下, 2:右上, 3:後ろ, 4:右下, 5:右
-const DIR_TO_CELL = [
-  {c:0,r:0}, // 下（前）
-  {c:4,r:0}, // 右下（右前）
-  {c:5,r:0}, // 右
-  {c:3,r:0}, // 上（後ろ）
-  {c:1,r:0}, // 左
-  {c:1,r:0}, // 左下（左前）
-];
+// --- 方向スプライト: 4x4/16スタイルシートに対応 ---
+// 1-4: 下, 5-6: 右下, 7-10: 右, 11-12: 右上, 13-16: 上
+// 左・左上・左下は右系の水平反転で対応
+// dir: 0=下, 1=右下, 2=右, 3=上, 4=左, 5=左下 (現状6方向)
+const FRAMES = {
+  down:      [ {c:0,r:0}, {c:1,r:0}, {c:2,r:0}, {c:3,r:0} ],     // 1..4
+  rightdown: [ {c:0,r:1}, {c:1,r:1} ],                             // 5..6
+  right:     [ {c:2,r:1}, {c:3,r:1}, {c:0,r:2}, {c:1,r:2} ],       // 7..10
+  rightup:   [ {c:2,r:2}, {c:3,r:2} ],                             // 11..12（未使用）
+  up:        [ {c:0,r:3}, {c:1,r:3}, {c:2,r:3}, {c:3,r:3} ],       // 13..16
+};
 
-// dir範囲を6に丸める（7,8方向入力でも最も近い方向へ丸める）
-function getCellForDir(dir){
-  return DIR_TO_CELL[dir % DIR_TO_CELL.length] || DIR_TO_CELL[0];
+function getAnimForDir(dir){
+  const d = ((dir|0) % 6 + 6) % 6; // 0..5
+  switch(d){
+    case 0: return { frames: FRAMES.down,      flip:false };
+    case 1: return { frames: FRAMES.rightdown, flip:false };
+    case 2: return { frames: FRAMES.right,     flip:false };
+    case 3: return { frames: FRAMES.up,        flip:false };
+    case 4: return { frames: FRAMES.right,     flip:true  }; // 左 = 右の反転
+    case 5: return { frames: FRAMES.rightdown, flip:true  }; // 左下 = 右下の反転
+    default: return { frames: FRAMES.down,     flip:false };
+  }
 }
 
 export function drawPlayer(ctx, player) {
-   if (!playerSprite.ready) return;
-   const fw = playerSprite.frameW;
-   const fh = playerSprite.frameH;
-   const dir = Math.max(0, Math.min(7, player.dir|0));
-   const cell = getCellForDir(dir);
-   const sx = cell.c * fw;
-   const sy = cell.r * fh;
-   // まずはワールド→スクリーン変換無しで中央付近に確実表示
-   const dx = Math.floor(player.x - fw/2);
-   const dy = Math.floor(player.y - fh/2);
-   ctx.drawImage(playerSprite.img, sx, sy, fw, fh, dx, dy, fw, fh);
+  if (!playerSprite.ready) return;
+  const fw = playerSprite.frameW;
+  const fh = playerSprite.frameH;
+  const dir = Math.max(0, Math.min(7, player.dir|0));
+  const anim = getAnimForDir(dir);
+  const frames = anim.frames;
+  const isMoving = !!player.moving;
+  const now = performance.now();
+  const period = frames.length === 2 ? 180 : 120; // 2枚はやや遅め、4枚は標準
+  const idx = isMoving ? (Math.floor(now / period) % frames.length) : 0;
+  const frame = frames[idx];
+  const sx = frame.c * fw;
+  const sy = frame.r * fh;
+  const dx = Math.floor(player.x - fw/2);
+  const dy = Math.floor(player.y - fh/2);
 
-
-  // もし見えない場合の切り分け用：スプライトシート全体を左上に小さく表示
-  // （一時的な可視化。表示されたら削除OK）
-  // removed debug: sheet preview at top-left
- }
+  if (anim.flip) {
+    ctx.save();
+    ctx.translate(dx + fw, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(playerSprite.img, sx, sy, fw, fh, 0, 0, fw, fh);
+    ctx.restore();
+  } else {
+    ctx.drawImage(playerSprite.img, sx, sy, fw, fh, dx, dy, fw, fh);
+  }
+}
 
 export function renderFrame(alpha){
   const { ctx, cam, world, fire, trees, drops, bear, player, snow, screen, game } = state;
@@ -201,7 +219,7 @@ function drawOrdersHud(now){
     ctx.strokeRect(16, y, width, height);
 
     ctx.fillStyle = '#e4edff';
-    ctx.fillText(`#${order.id} 槍 ${order.progress}/${order.need.spear}`, 24, y + 18);
+    ctx.fillText(`#${order.id} 進捗 ${order.progress}/${order.need.spear}`, 24, y + 18);
     const reward = order.need.spear * game.orderConfig.rewardPerSpear;
     ctx.fillText(`報酬 +${reward}c`, 24, y + 36);
 
@@ -292,3 +310,4 @@ function drawInventoryHud(){
   ctx.fillText(`Wood: ${game.inventory.wood} / Spear: ${game.inventory.spear}`, x, y);
   ctx.restore();
 }
+

@@ -34,6 +34,8 @@ export function updateFrame(dt){
     if(lt) vx -= sp;
     if(rt) vx += sp;
   }
+  // movement flag for animations
+  player.moving = (vx !== 0 || vy !== 0);
   // update facing direction from current movement vector
   updatePlayerDir(player, vx, vy);
   player.x = clamp(player.x + vx, 0, world.w);
