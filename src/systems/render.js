@@ -1,9 +1,11 @@
 import { state } from '../state.js';
 import { t } from '../ui/messages.js';
-import { clamp } from '../utils.js';
-import { BASE_W, BASE_H } from '../config.js';
+import { clamp, drawFrame } from '../utils.js';
+import { BASE_W, BASE_H, SPRITE } from '../config.js';
+import { renderHUD } from '../ui/hud.js';
 // src/systems/render.js
 import { SPRITES } from '../config.js';
+import { SIZES } from '../config.js';
 
 const playerSprite = {
   img: new Image(),
@@ -46,6 +48,25 @@ function getAnimForDir(dir){
     case 5: return { frames: FRAMES.rightdown, flip:true  }; // 左下 = 右下の反転
     default: return { frames: FRAMES.down,     flip:false };
   }
+}
+
+// New sprite-based player renderer (32x32 sheets)
+function drawPlayerNew(ctx, player){
+  const size = SPRITE.SIZE;
+  const dx = Math.floor(player.x - size/2);
+  const dy = Math.floor(player.y - size/2);
+  const anim = player.anim;
+  if(!anim || !anim.image){
+    ctx.save();
+    ctx.fillStyle = '#223';
+    ctx.fillRect(dx, dy, size, size);
+    ctx.strokeStyle = '#889';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(dx+size,dy+size); ctx.moveTo(dx+size,dy); ctx.lineTo(dx,dy+size); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  drawFrame(ctx, anim.image, anim.frame|0, anim.grid, dx, dy, size);
 }
 
 export function drawPlayer(ctx, player) {
@@ -134,21 +155,39 @@ export function renderFrame(alpha){
     }
   }
 
-  // trees
+  // trees (image sprites; fallback to shapes if not ready)
   for(const t of trees){
-    if(t.hp<=0){
-      ctx.fillStyle = '#7b5b42';
-      ctx.beginPath(); ctx.arc(t.x, t.y, 8, 0, Math.PI*2); ctx.fill(); // stump
+    const alive = t.hp > 0;
+    const img = alive ? state.sprites.objects.treeAlive : state.sprites.objects.treeStump;
+    if (img){
+      const size = alive ? SIZES.TREE_ALIVE : SIZES.TREE_STUMP;
+      const dx = Math.floor(t.x - size.w/2);
+      const dy = Math.floor(t.y - size.h);
+      ctx.drawImage(img, dx, dy, size.w, size.h);
     } else {
-      ctx.fillStyle = '#2e8b57';
-      ctx.beginPath(); ctx.moveTo(t.x, t.y-12); ctx.lineTo(t.x-10, t.y+10); ctx.lineTo(t.x+10, t.y+10); ctx.closePath(); ctx.fill();
+      if(!alive){
+        ctx.fillStyle = '#7b5b42';
+        ctx.beginPath(); ctx.arc(t.x, t.y, 8, 0, Math.PI*2); ctx.fill(); // stump
+      } else {
+        ctx.fillStyle = '#2e8b57';
+        ctx.beginPath(); ctx.moveTo(t.x, t.y-12); ctx.lineTo(t.x-10, t.y+10); ctx.lineTo(t.x+10, t.y+10); ctx.closePath(); ctx.fill();
+      }
     }
   }
 
-  // drops
+  // drops (image sprites; fallback to circles)
   for(const d of drops){
-    ctx.fillStyle = d.type==='log'? '#c48b54':'#ff647a';
-    ctx.beginPath(); ctx.arc(d.x,d.y,6,0,Math.PI*2); ctx.fill();
+    let img = null, sz = SIZES.WOOD;
+    if (d.type === 'wood') { img = state.sprites.objects.woodDrop; }
+    else if (d.type === 'meat') { img = state.sprites.objects.meatDrop; sz = SIZES.MEAT; }
+    if (img){
+      const dx = Math.floor(d.x - sz.w/2);
+      const dy = Math.floor(d.y - sz.h/2);
+      ctx.drawImage(img, dx, dy, sz.w, sz.h);
+    } else {
+      ctx.fillStyle = d.type==='wood'? '#c48b54':'#ff647a';
+      ctx.beginPath(); ctx.arc(d.x,d.y,6,0,Math.PI*2); ctx.fill();
+    }
   }
 
   // bear
@@ -159,8 +198,8 @@ export function renderFrame(alpha){
     ctx.beginPath(); ctx.arc(bear.x+6, bear.y-4, 4, 0, Math.PI*2); ctx.fill();
   }
 
-  // player (use sprite instead of placeholder shapes)
-  drawPlayer(ctx, player);
+  // player (new sprite renderer)
+  drawPlayerNew(ctx, player);
 
   ctx.restore();
 
@@ -180,6 +219,7 @@ export function renderFrame(alpha){
     drawOrdersHud(frameNow);
     drawStationsHud(frameNow);
     drawInventoryHud();
+    renderHUD(ctx);
   }
 }
 
@@ -310,4 +350,3 @@ function drawInventoryHud(){
   ctx.fillText(`Wood: ${game.inventory.wood} / Spear: ${game.inventory.spear}`, x, y);
   ctx.restore();
 }
-

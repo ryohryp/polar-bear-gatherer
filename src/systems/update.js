@@ -1,4 +1,5 @@
 import { state } from '../state.js';
+import { SPRITE, DIRS, PLAYER_STATE, PLAYER_WEAPON, ANIM, WALK_ANIM, WALK_SHEETS } from '../config.js';
 import { log, updateHud, showGameOver } from '../ui/hud.js';
 import { t } from '../ui/messages.js';
 import { clamp, dist } from '../utils.js';
@@ -40,6 +41,9 @@ export function updateFrame(dt){
   updatePlayerDir(player, vx, vy);
   player.x = clamp(player.x + vx, 0, world.w);
   player.y = clamp(player.y + vy, 0, world.h);
+
+  // === Player anim: 8-dir quantize and sheet selection ===
+  updatePlayerAnim(player, vx, vy);
 
   if(state.autoChopCooldown>0) state.autoChopCooldown--;
   if(state.autoFeedCooldown>0) state.autoFeedCooldown--;
@@ -152,4 +156,82 @@ export function updatePlayerDir(player, vx, vy) {
   else if (deg < 210) player.dir = 5;                  // 左下
   else if (deg < 270) player.dir = 4;                  // 左
   else player.dir = 3;                                 // 上
+}
+
+// choose sheet and params based on player state
+function selectSheet(player){
+  const anim = player.anim;
+  const weaponKey = anim.weapon === PLAYER_WEAPON.SPEAR ? 'spear' : 'none';
+  // priority: DEAD > HURT > ATTACK > COLD > WALK > IDLE
+  let cfg = null; let sheetKey = '';
+  if(anim.state === PLAYER_STATE.DEAD){ cfg = ANIM.dead; sheetKey = 'dead'; }
+  else if(anim.state === PLAYER_STATE.HURT){ cfg = ANIM.hurt; sheetKey = 'hurt'; }
+  else if(anim.state === PLAYER_STATE.ATTACK){
+    cfg = (weaponKey==='spear') ? ANIM.spearAttack : ANIM.attack; sheetKey = weaponKey==='spear'?'spearAttack':'attack';
+  }
+  else if(anim.state === PLAYER_STATE.COLD){ cfg = ANIM.cold; sheetKey = 'cold'; }
+  else if(anim.state === PLAYER_STATE.WALK){
+    const path = WALK_SHEETS[weaponKey][anim.dir] || WALK_SHEETS[weaponKey]['down'];
+    cfg = { sheet: path, ...WALK_ANIM };
+    sheetKey = `walk:${weaponKey}:${anim.dir}`;
+  } else {
+    cfg = (weaponKey==='spear') ? ANIM.spearIdle : ANIM.idle; sheetKey = weaponKey==='spear'?'spearIdle':'idle';
+  }
+  const image = state.assets?.images?.[cfg.sheet] || null;
+  return { image, frames: cfg.frames, fps: cfg.fps, loop: cfg.loop, grid: cfg.grid, sheetKey };
+}
+
+function quantize8Dir(vx, vy, prevDir){
+  const t = 0.1; // DEADZONE
+  const ax = Math.abs(vx), ay = Math.abs(vy);
+  if(ax < t && ay < t){ return prevDir || 'down'; }
+  const ang = Math.atan2(vy, vx); // -PI..PI (x-right, y-down)
+  const deg = (ang * 180 / Math.PI + 360) % 360;
+  if(deg >= 337.5 || deg < 22.5) return 'right';
+  if(deg < 67.5) return 'downright';
+  if(deg < 112.5) return 'down';
+  if(deg < 157.5) return 'downleft';
+  if(deg < 202.5) return 'left';
+  if(deg < 247.5) return 'upleft';
+  if(deg < 292.5) return 'up';
+  return 'upright';
+}
+
+function updatePlayerAnim(player, vx, vy){
+  const anim = player.anim;
+  if(!anim) return;
+  // weapon sync
+  anim.weapon = player.hasSpear ? PLAYER_WEAPON.SPEAR : PLAYER_WEAPON.NONE;
+  // dir update (8-way)
+  anim.dir = quantize8Dir(vx, vy, anim.dir);
+  // walking state based on movement when not in high-priority states
+  if(anim.state !== PLAYER_STATE.ATTACK && anim.state !== PLAYER_STATE.HURT && anim.state !== PLAYER_STATE.DEAD){
+    anim.state = player.moving ? PLAYER_STATE.WALK : PLAYER_STATE.IDLE;
+  }
+  const beforeKey = anim.sheetKey;
+  const chosen = selectSheet(player);
+  anim.image = chosen.image; anim.fps = chosen.fps; anim.loop = chosen.loop; anim.grid = chosen.grid; anim.sheetKey = chosen.sheetKey;
+  const frames = chosen.frames;
+  // frame timer
+  anim.timer += 1; // tick based
+  const threshold = Math.max(1, Math.floor(60 / (anim.fps || 1)));
+  if(anim.timer >= threshold){
+    anim.timer = 0; anim.frame += 1;
+  }
+  if(anim.loop){
+    anim.frame = frames>0 ? (anim.frame % frames) : 0;
+  } else {
+    const last = Math.max(0, frames-1);
+    if(anim.frame >= last){
+      anim.frame = last;
+      // natural recovery after non-loop end
+      if(anim.state === PLAYER_STATE.ATTACK){
+        anim.state = player.moving ? PLAYER_STATE.WALK : PLAYER_STATE.IDLE;
+      }
+    }
+  }
+  // reset on sheet change
+  if(anim.sheetKey !== beforeKey){
+    anim.frame = 0; anim.timer = 0;
+  }
 }

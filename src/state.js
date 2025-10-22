@@ -1,4 +1,4 @@
-import { WORLD } from './config.js';
+import { WORLD, PLAYER_STATE, PLAYER_WEAPON } from './config.js';
 import { t } from './ui/messages.js';
 
 function createInputState(){
@@ -75,9 +75,35 @@ export const state = {
   cam: { x:0, y:0 },
 
   // エンティティ
-  player: { x:200, y:400, r:12, sp:2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0 },
+  player: { 
+    x:200, y:400, r:12, sp:2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0,
+    // sprite anim state (initialized lazily; images loaded in main)
+    anim: {
+      state: PLAYER_STATE.IDLE,
+      weapon: PLAYER_WEAPON.NONE,
+      dir: 'left',
+      frame: 0,
+      timer: 0,
+      fps: 10,
+      loop: true,
+      grid: { cols:4, rows:3 },
+      image: null,
+      sheetKey: 'idle'
+    }
+  },
   fire:   { x:220, y:420, r:18, heat:70, embers:0 },
   inv:    { wood:0, meat:0 },
+
+  // Images and sprite handles
+  images: {},
+  sprites: {
+    objects: {
+      treeAlive: null,
+      treeStump: null,
+      woodDrop:  null,
+      meatDrop:  null,
+    }
+  },
 
   trees: [],
   bear:  { x:1600, y:900, r:18, hp:150, alive:true, aggro:false, inv:0 },
@@ -127,6 +153,19 @@ export function initState({ canvas, ctx, ui }){
 export function restart(){
   const { player, inv, trees, bear, drops, fire, ui } = state;
   player.x=200; player.y=400; player.hp=100; player.cold=100; player.hasSpear=false; player.atk=10; player.atkCD=0;
+  // reset anim
+  if(player.anim){
+    player.anim.state = PLAYER_STATE.IDLE;
+    player.anim.weapon = PLAYER_WEAPON.NONE;
+    player.anim.dir = 'left';
+    player.anim.frame = 0;
+    player.anim.timer = 0;
+    player.anim.fps = 10;
+    player.anim.loop = true;
+    player.anim.grid = { cols:4, rows:3 };
+    player.anim.image = null;
+    player.anim.sheetKey = 'idle';
+  }
   inv.wood=0; inv.meat=0; ui.bearHud.style.display='none';
   trees.forEach(t=>t.hp = Math.random()<0.5? 30:20);
   bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; bear.inv=0;

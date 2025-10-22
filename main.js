@@ -1,4 +1,6 @@
-import { FIXED_DT, MAX_STEPS, BASE_W, BASE_H } from './src/config.js';
+import { FIXED_DT, MAX_STEPS, BASE_W, BASE_H, ASSETS } from './src/config.js';
+import { loadImage } from './src/utils.js';
+import { ANIM, WALK_SHEETS, PLAYER_ICON } from './src/config.js';
 import { state, initState, restart } from './src/state.js';
 import { attachPointer } from './src/input/pointer.js';
 import { updateFrame } from './src/systems/update.js';
@@ -6,7 +8,18 @@ import { renderFrame } from './src/systems/render.js';
 import { craftSpear, buyUpgrade } from './src/systems/actions.js';
 import { showGameOver } from './src/ui/hud.js';
 
-(() => {
+async function loadResources(){
+  try {
+    state.sprites.objects.treeAlive = await loadImage(ASSETS.objects.treeAlive);
+    state.sprites.objects.treeStump = await loadImage(ASSETS.objects.treeStump);
+    state.sprites.objects.woodDrop  = await loadImage(ASSETS.objects.woodDrop);
+    state.sprites.objects.meatDrop  = await loadImage(ASSETS.objects.meatDrop);
+  } catch (e) {
+    console.warn('Failed to load some resources:', e);
+  }
+}
+
+(async () => {
   // Canvas / resize
   const cvs = document.getElementById('game');
   const ctx = cvs.getContext('2d');
@@ -39,6 +52,9 @@ import { showGameOver } from './src/ui/hud.js';
   }
   addEventListener('resize', resize); resize();
 
+  // Preload resource object images before game init
+  await loadResources();
+
   // 状態初期化（UI参照もここで採取）
   initState({
     canvas: cvs,
@@ -56,6 +72,51 @@ import { showGameOver } from './src/ui/hud.js';
       btnRestart: document.getElementById('btnRestart'),
     }
   });
+
+  // Prepare asset cache map
+  state.assets = state.assets || {};
+  state.assets.images = {};
+
+  // Preload player-related sheets and icon
+  try {
+    const sheets = new Set([
+      ANIM.idle.sheet,
+      ANIM.attack.sheet,
+      ANIM.spearIdle.sheet,
+      ANIM.spearAttack.sheet,
+      ANIM.hurt.sheet,
+      ANIM.dead.sheet,
+      ANIM.cold.sheet,
+      WALK_SHEETS.none.up,
+      WALK_SHEETS.none.down,
+      WALK_SHEETS.none.left,
+      WALK_SHEETS.none.right,
+      WALK_SHEETS.none.upleft,
+      WALK_SHEETS.none.upright,
+      WALK_SHEETS.none.downleft,
+      WALK_SHEETS.none.downright,
+      WALK_SHEETS.spear.up,
+      WALK_SHEETS.spear.down,
+      WALK_SHEETS.spear.left,
+      WALK_SHEETS.spear.right,
+      WALK_SHEETS.spear.upleft,
+      WALK_SHEETS.spear.upright,
+      WALK_SHEETS.spear.downleft,
+      WALK_SHEETS.spear.downright,
+      PLAYER_ICON,
+    ]);
+    const list = Array.from(sheets);
+    await Promise.all(list.map(src =>
+      loadImage(src).then(img=>{ state.assets.images[src] = img; }).catch(()=>{})
+    ));
+  } catch (_) {
+    // continue even if some fail
+  }
+  // Set initial player anim image (idle)
+  if(state.player?.anim){
+    state.player.anim.image = state.assets.images[ANIM.idle.sheet] ?? null;
+  }
+  console.info("[PBG] player assets loaded:", Object.keys(state.assets.images).length);
 
   // 入力（ドラッグのみ移動／長押し無効）
   attachPointer();

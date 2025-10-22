@@ -1,4 +1,5 @@
 import { state } from '../state.js';
+import { PLAYER_STATE } from '../config.js';
 import { log, showBearHP, setBearHP } from '../ui/hud.js';
 import { t } from '../ui/messages.js';
 import { clamp, dist } from '../utils.js';
@@ -49,7 +50,7 @@ export function tryChopNearestTree(source='manual'){
   if(target.hp>0){
     log(source==='auto' ? t('chop.progress.auto') : t('chop.progress'));
   } else {
-    drops.push({x:target.x, y:target.y, type:'log'});
+    drops.push({x:target.x, y:target.y, type:'wood'});
     log(source==='auto' ? t('chop.down.auto') : t('chop.down'));
   }
   return true;
@@ -65,6 +66,12 @@ export function tryAttackBear(){
       bear.alive=false; drops.push({x:bear.x,y:bear.y,type:'meat'});
       log(t('bear.kill')); showBearHP(false);
     }
+    // trigger attack animation
+    if (player.anim && player.anim.state !== PLAYER_STATE.ATTACK){
+      player.anim.state = PLAYER_STATE.ATTACK;
+      player.anim.frame = 0;
+      player.anim.timer = 0;
+    }
     return true;
   }
   return false;
@@ -75,7 +82,7 @@ export function pickupDrops(source='manual'){
   let picked=false;
   for(let i=drops.length-1;i>=0;i--){
     if(dist(drops[i],player)<28){
-      if(drops[i].type==='log') inv.wood++;
+      if(drops[i].type==='wood') inv.wood++;
       else inv.meat++;
       drops.splice(i,1);
       picked = true;
