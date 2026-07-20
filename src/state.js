@@ -195,7 +195,12 @@ export function initState({ canvas, ctx, ui }) {
 export function restart() {
   state.gameOver = false;
   state.keys.clear();
-  Object.assign(state.input, createInputState());
+  const freshInput = createInputState();
+  if(state.input?.drag){
+    Object.assign(state.input.drag, freshInput.drag);
+  } else {
+    state.input = freshInput;
+  }
   state.moveTarget.active = false;
   state.dragState.active = false;
   state.dragState.started = false;
