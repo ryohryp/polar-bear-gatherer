@@ -1,10 +1,34 @@
 import { state } from '../state.js';
 import { t } from './messages.js';
+import { PLAYER_ICON } from '../config.js';
+import { loadImage } from '../utils.js';
+
+// lazily loaded HUD icon
+const hud = { iconImage: null, _loading: false };
+
+async function ensureIconLoaded(){
+  if(hud.iconImage) return hud.iconImage;
+  // prefer preloaded image from state
+  const pre = state.assets?.images?.[PLAYER_ICON];
+  if(pre){ hud.iconImage = pre; return hud.iconImage; }
+  if(hud._loading) return null;
+  try {
+    hud._loading = true;
+    hud.iconImage = await loadImage(PLAYER_ICON);
+  } catch(_) {
+    // ignore
+  } finally {
+    hud._loading = false;
+  }
+  return hud.iconImage;
+}
 
 /** 各バーとインベントリのUIを更新 */
 export function updateHud(){
   const { ui, player, fire, inv } = state;
   if (!ui) return;
+  // kick icon load
+  ensureIconLoaded();
 
   // bars
   if (ui.hp)   ui.hp.style.width   = player.hp + '%';
@@ -31,6 +55,18 @@ export function setBearHP(rate){
   if (!bar) return;
   const pct = Math.max(0, Math.min(1, rate)) * 100;
   bar.style.width = pct + '%';
+}
+
+// Render HUD overlays on canvas (icon etc.)
+export function renderHUD(ctx){
+  const img = hud.iconImage || state.assets?.images?.[PLAYER_ICON] || null;
+  if(!img) return;
+  const x = 16, y = 64; // avoid top-left bars area
+  ctx.save();
+  ctx.translate(state.screen.offsetX, state.screen.offsetY);
+  ctx.scale(state.screen.scale, state.screen.scale);
+  ctx.drawImage(img, x, y, 48, 48);
+  ctx.restore();
 }
 
 // ===== Log with fade =====
