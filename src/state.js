@@ -1,4 +1,4 @@
-import { WORLD, PLAYER_STATE, PLAYER_WEAPON } from './config.js';
+import { WORLD, PLAYER_STATE, PLAYER_WEAPON, ANIM } from './config.js';
 import { t } from './ui/messages.js';
 import { ParticleSystem } from './systems/particles.js';
 import { LightingSystem } from './systems/lighting.js';
@@ -49,11 +49,59 @@ function createGameState() {
     nextDifficultyAt: 35,
     orderCheckTimer: 0,
     events: [],
+    visualEvents: [],
   };
 }
 
+function createCampState() {
+  return {
+    center: { x: 500, y: 420 },
+    popups: [],
+    pulses: {
+      gather: 0,
+      craft: 0,
+      trap: 0,
+    },
+  };
+}
+
+function createTrees() {
+  const trees = [];
+  const cx = 500;
+  const cy = 420;
+
+  for (let i = 0; i < 18; i++) {
+    const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.18;
+    const radius = 250 + Math.random() * 170;
+    trees.push({
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+      hp: 30,
+    });
+  }
+
+  for (let i = trees.length; i < 45; i++) {
+    trees.push({
+      x: 260 + Math.random() * 1500,
+      y: 180 + Math.random() * 1040,
+      hp: 30,
+    });
+  }
+
+  return trees;
+}
+
+function createSnow() {
+  return Array.from({ length: 120 }, () => ({
+    x: Math.random() * WORLD.w,
+    y: Math.random() * WORLD.h,
+    r: 1.2 + Math.random() * 1.4,
+    drift: 0.4 + Math.random() * 0.6,
+    speed: 0.6 + Math.random() * 0.8,
+  }));
+}
+
 export const state = {
-  // DOM / UI
   canvas: null,
   ctx: null,
   ui: null,
@@ -66,37 +114,42 @@ export const state = {
     dpr: 1,
   },
 
-  // 入力（キーボード / ドラッグターゲット）
   keys: new Set(),
-  moveTarget: { active: false, x: 0, y: 0 }, // 互換残置（未使用化）
-  dragState: { active: false, started: false, startX: 0, startY: 0 }, // 互換残置（未使用化）
+  moveTarget: { active: false, x: 0, y: 0 },
+  dragState: { active: false, started: false, startX: 0, startY: 0 },
   input: createInputState(),
 
-  // カメラ・ワールド
   world: { ...WORLD },
-  cam: { x: 0, y: 0 },
+  cam: { x: 0, y: 0, shake: 0 },
 
-  // エンティティ
   player: {
-    x: 200, y: 400, r: 12, sp: 2.0, hp: 100, cold: 100, hasSpear: false, atk: 10, atkCD: 0,
-    // sprite anim state (initialized lazily; images loaded in main)
+    x: 500,
+    y: 515,
+    r: 12,
+    sp: 2.0,
+    hp: 100,
+    cold: 100,
+    hasSpear: false,
+    atk: 10,
+    atkCD: 0,
+    moving: false,
     anim: {
       state: PLAYER_STATE.IDLE,
       weapon: PLAYER_WEAPON.NONE,
-      dir: 'left',
+      dir: 'up',
       frame: 0,
       timer: 0,
       fps: 10,
       loop: true,
       grid: { cols: 4, rows: 3 },
       image: null,
-      sheetKey: 'idle'
-    }
+      sheetKey: 'idle',
+    },
   },
-  fire: { x: 220, y: 420, r: 18, heat: 70, embers: 0 },
+  fire: { x: 500, y: 440, r: 18, heat: 70, embers: 0 },
   inv: { wood: 0, meat: 0 },
 
-  // Images and sprite handles
+  assets: { images: {} },
   images: {},
   sprites: {
     objects: {
@@ -104,77 +157,94 @@ export const state = {
       treeStump: null,
       woodDrop: null,
       meatDrop: null,
-    }
+    },
   },
 
   trees: [],
-  bear: { x: 1600, y: 900, r: 18, hp: 150, alive: true, aggro: false, inv: 0 },
+  bear: { x: 1600, y: 900, r: 22, hp: 150, alive: true, aggro: false, inv: 0 },
   drops: [],
   snow: [],
 
-  // 自動系クールダウン
   autoChopCooldown: 0,
   autoFeedCooldown: 0,
 
-  // ゲーム状態
   gameOver: false,
   game: createGameState(),
+  camp: createCampState(),
 
-  // Visual Effects
   particles: new ParticleSystem(),
   lighting: new LightingSystem(),
 };
 
-export function initState({ canvas, ctx, ui }) {
-  state.canvas = canvas;
-  state.ctx = ctx;
-  state.ui = ui;
-  state.game = createGameState();
-  if (state.input?.drag) {
-    Object.assign(state.input.drag, createInputState().drag);
-  }
+function resetPlayer() {
+  const player = state.player;
+  player.x = 500;
+  player.y = 515;
+  player.hp = 100;
+  player.cold = 100;
+  player.hasSpear = false;
+  player.atk = 10;
+  player.atkCD = 0;
+  player.moving = false;
 
-  // キー
-  document.addEventListener('keydown', e => { state.keys.add(e.key); });
-  document.addEventListener('keyup', e => { state.keys.delete(e.key); });
-
-  // ツリー
-  state.trees.length = 0;
-  for (let i = 0; i < 45; i++) {
-    state.trees.push({ x: 300 + Math.random() * 1600, y: 200 + Math.random() * 1000, hp: 30 });
-  }
-
-  // 雪
-  state.snow = Array.from({ length: 120 }, () => ({
-    x: Math.random() * state.world.w,
-    y: Math.random() * state.world.h,
-    r: 1.2 + Math.random() * 1.4,
-    drift: 0.4 + Math.random() * 0.6,
-    speed: 0.6 + Math.random() * 0.8
-  }));
-
-  log(t('tips.drag'));
-}
-
-export function restart() {
-  const { player, inv, trees, bear, drops, fire, ui } = state;
-  player.x = 200; player.y = 400; player.hp = 100; player.cold = 100; player.hasSpear = false; player.atk = 10; player.atkCD = 0;
-  // reset anim
   if (player.anim) {
     player.anim.state = PLAYER_STATE.IDLE;
     player.anim.weapon = PLAYER_WEAPON.NONE;
-    player.anim.dir = 'left';
+    player.anim.dir = 'up';
     player.anim.frame = 0;
     player.anim.timer = 0;
     player.anim.fps = 10;
     player.anim.loop = true;
     player.anim.grid = { cols: 4, rows: 3 };
-    player.anim.image = null;
     player.anim.sheetKey = 'idle';
+    player.anim.image = state.assets?.images?.[ANIM.idle.sheet] ?? null;
   }
 }
 
-// NOTE: 互換維持用（呼び出し元は ui/hud.js の log に置換済み）
+function resetWorld() {
+  resetPlayer();
+
+  Object.assign(state.fire, { x: 500, y: 440, r: 18, heat: 70, embers: 0 });
+  Object.assign(state.inv, { wood: 0, meat: 0 });
+  Object.assign(state.bear, { x: 1600, y: 900, r: 22, hp: 150, alive: true, aggro: false, inv: 0 });
+
+  state.trees = createTrees();
+  state.drops = [];
+  state.snow = createSnow();
+  state.autoChopCooldown = 0;
+  state.autoFeedCooldown = 0;
+  state.gameOver = false;
+  state.keys.clear();
+  state.game = createGameState();
+  state.camp = createCampState();
+  state.cam.x = 0;
+  state.cam.y = 0;
+  state.cam.shake = 0;
+  state.particles = new ParticleSystem();
+  state.lighting = new LightingSystem();
+
+  if (state.ui?.bearHud) state.ui.bearHud.style.display = 'none';
+  if (state.ui?.bear) state.ui.bear.style.width = '100%';
+  if (state.input?.drag) Object.assign(state.input.drag, createInputState().drag);
+}
+
+export function initState({ canvas, ctx, ui }) {
+  state.canvas = canvas;
+  state.ctx = ctx;
+  state.ui = ui;
+  resetWorld();
+
+  document.addEventListener('keydown', e => { state.keys.add(e.key); });
+  document.addEventListener('keyup', e => { state.keys.delete(e.key); });
+
+  log(t('tips.drag'));
+}
+
+export function restart() {
+  resetWorld();
+  log('キャンプを再建しました。まずは木材を集めよう！');
+}
+
 export function log(msg) {
   if (state.ui?.log) state.ui.log.textContent = msg;
 }
