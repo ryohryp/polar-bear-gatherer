@@ -174,7 +174,7 @@ function drawGoalPanel(ctx) {
   ctx.textAlign = 'center';
   const width = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width) + 30;
   const x = BASE_W / 2 - width / 2;
-  const y = 14;
+  const y = player.hasSpear && bear.alive ? 68 : 14;
   ctx.fillStyle = '#17213a';
   ctx.fillRect(Math.round(x - 3), y - 3, Math.round(width + 6), 48);
   ctx.fillStyle = '#fff2c7';
@@ -195,7 +195,7 @@ function drawOrdersHud(now) {
   ctx.translate(screen.offsetX, screen.offsetY);
   ctx.scale(screen.scale, screen.scale);
 
-  let y = 82;
+  let y = 128;
   const x = 14;
   const width = 210;
   const height = 58;
@@ -252,7 +252,7 @@ function drawInventoryHud() {
 
   const width = 202;
   const x = BASE_W - width - 14;
-  const y = 82;
+  const y = 106;
   ctx.fillStyle = '#17213a';
   ctx.fillRect(x - 3, y - 3, width + 6, 47);
   ctx.fillStyle = '#fff2c7';
