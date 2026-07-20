@@ -1,6 +1,55 @@
 import { WORLD } from './config.js';
 import { t } from './ui/messages.js';
 
+function createInputState(){
+  return {
+    drag: {
+      active: false,
+      pointerId: null,
+      moved: false,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
+      dirX: 0,
+      dirY: 0,
+    },
+  };
+}
+
+function createGameState(){
+  return {
+    coins: 0,
+    time: 0,
+    difficulty: 1,
+    orders: [],
+    completedOrders: 0,
+    deliveredSpear: 0,
+    inventory: {
+      wood: 0,
+      spear: 0,
+    },
+    stations: {
+      gather: { level: 1, busyUntil: 0, queue: 0, baseMs: 1600, workStart: 0, workDuration: 0 },
+      craft:  { level: 1, busyUntil: 0, queue: 0, baseMs: 2000, workStart: 0, workDuration: 0 },
+      trap:   { level: 1, busyUntil: 0, queue: 0, baseMs: 1400, workStart: 0, workDuration: 0 },
+    },
+    orderConfig: {
+      maxConcurrent: 1,
+      baseExpireMs: 12000,
+      rewardPerSpear: 3,
+      penaltyFail: 10,
+    },
+    flags: {
+      modeOrderRush: true,
+    },
+    nextOrderId: 1,
+    nextDifficultyAt: 35,
+    orderCheckTimer: 0,
+    events: [],
+  };
+}
+
 export const state = {
   // DOM / UI
   canvas: null,
@@ -19,12 +68,7 @@ export const state = {
   keys: new Set(),
   moveTarget: { active:false, x:0, y:0 }, // 互換残置（未使用化）
   dragState: { active:false, started:false, startX:0, startY:0 }, // 互換残置（未使用化）
-  stick: {
-    active: false,
-    originX: 0, originY: 0,
-    curX: 0, curY: 0,
-    dirX: 0, dirY: 0,
-  },
+  input: createInputState(),
 
   // カメラ・ワールド
   world: { ...WORLD },
@@ -46,12 +90,17 @@ export const state = {
 
   // ゲーム状態
   gameOver: false,
+  game: createGameState(),
 };
 
 export function initState({ canvas, ctx, ui }){
   state.canvas = canvas;
   state.ctx = ctx;
   state.ui = ui;
+  state.game = createGameState();
+  if(state.input?.drag){
+    Object.assign(state.input.drag, createInputState().drag);
+  }
 
   // キー
   document.addEventListener('keydown', e=>{ state.keys.add(e.key); });
@@ -84,6 +133,10 @@ export function restart(){
   drops.length=0;
   fire.heat = 70; fire.embers = 0;
   state.gameOver = false;
+  state.game = createGameState();
+  if(state.input?.drag){
+    Object.assign(state.input.drag, createInputState().drag);
+  }
   log('再開！');
 }
 

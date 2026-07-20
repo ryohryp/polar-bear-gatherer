@@ -2,16 +2,20 @@ import { state } from '../state.js';
 import { log, updateHud, showGameOver } from '../ui/hud.js';
 import { t } from '../ui/messages.js';
 import { clamp, dist } from '../utils.js';
-import { craftSpear, tryAttackBear, tryChopNearestTree, pickupDrops, feedFire } from './actions.js';
+import { craftSpear, tryAttackBear, tryChopNearestTree, pickupDrops, feedFire, applyOrderPenalty } from './actions.js';
+import { tickLine } from './line.js';
+import { maybeSpawnOrders, tickOrders, raiseDifficulty } from './orders.js';
 
 export function updateFrame(dt){
-  const { keys, stick, player, world, fire, bear, inv } = state;
+  const { keys, player, world, fire, bear, inv, input, game } = state;
+  const nowMs = performance.now();
 
   // === GameOver時は停止（HUD更新のみ） ===
   if (state.gameOver){
     updateHud();
     return;
   }
+  game.time += dt;
   // 移動
   const up = keys.has('w')||keys.has('ArrowUp');
   const dn = keys.has('s')||keys.has('ArrowDown');
@@ -20,15 +24,18 @@ export function updateFrame(dt){
   const sp = player.sp;
 
   let vx=0, vy=0;
-  if (stick.active && (stick.dirX !== 0 || stick.dirY !== 0)){
-    vx = stick.dirX * sp;
-    vy = stick.dirY * sp;
+  const drag = input?.drag;
+  if (drag?.active && drag.moved){
+    vx = drag.dirX * sp;
+    vy = drag.dirY * sp;
   } else {
     if(up) vy -= sp;
     if(dn) vy += sp;
     if(lt) vx -= sp;
     if(rt) vx += sp;
   }
+  // update facing direction from current movement vector
+  updatePlayerDir(player, vx, vy);
   player.x = clamp(player.x + vx, 0, world.w);
   player.y = clamp(player.y + vy, 0, world.h);
 
@@ -65,6 +72,28 @@ export function updateFrame(dt){
     if(feedFire(true)) state.autoFeedCooldown = 120;
   }
 
+  // Order rush systems
+  if(game.flags.modeOrderRush){
+    tickLine(dt, state, nowMs);
+    tickOrders(dt, state, nowMs);
+    game.orderCheckTimer += dt;
+    while(game.orderCheckTimer >= 1){
+      maybeSpawnOrders(state, nowMs);
+      raiseDifficulty(state);
+      game.orderCheckTimer -= 1;
+    }
+    if(game.events.length){
+      for(const evt of game.events){
+        if(evt.type === 'orderFail'){
+          applyOrderPenalty(evt.penalty);
+        } else if(evt.type === 'orderDone'){
+          // TODO: 槍納品で白熊戦に影響を与えるフックを実装
+        }
+      }
+      game.events.length = 0;
+    }
+  }
+
   // Bear AI
   if(bear.alive && bear.aggro){
     const dx = player.x - bear.x; const dy = player.y - bear.y; const d = Math.hypot(dx,dy);
@@ -87,7 +116,14 @@ export function updateFrame(dt){
 
   // UI
   updateHud();
-  
+  const btnUpgrade = state.ui?.btnUpgradeCraft;
+  if(btnUpgrade){
+    const station = game.stations.craft;
+    const cost = 20 * station.level;
+    btnUpgrade.textContent = `CRAFT LvUP (${cost}c)`;
+    btnUpgrade.disabled = state.game.coins < cost;
+  }
+
   // Cキーでクラフト
   if(state.keys.has('C')){ state.keys.delete('C'); craftSpear(); }
 
@@ -98,4 +134,20 @@ export function updateFrame(dt){
     if(flake.y>state.world.h){ flake.y = -20; flake.x = Math.random()*state.world.w; }
     if(flake.x<0) flake.x += state.world.w; else if(flake.x>state.world.w) flake.x -= state.world.w;
   }
+}
+
+// src/systems/update.js
+export function updatePlayerDir(player, vx, vy) {
+  if (vx === 0 && vy === 0) return;
+
+  const angle = Math.atan2(vy, vx);
+  const deg = (angle * 180 / Math.PI + 360) % 360;
+
+  // --- 6方向シート用に丸めた角度分割 ---
+  if (deg >= 330 || deg < 30) player.dir = 2;          // 右
+  else if (deg < 90) player.dir = 1;                   // 右下
+  else if (deg < 150) player.dir = 0;                  // 下
+  else if (deg < 210) player.dir = 5;                  // 左下
+  else if (deg < 270) player.dir = 4;                  // 左
+  else player.dir = 3;                                 // 上
 }

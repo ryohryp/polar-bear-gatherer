@@ -119,6 +119,9 @@ canvas{
   font-size:14px;
   letter-spacing:.03em;
 }
+.btns button:disabled{
+  opacity:.45;
+}
 
 .hint{
   position:absolute;
