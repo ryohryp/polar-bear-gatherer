@@ -1,7 +1,9 @@
 import { WORLD, PLAYER_STATE, PLAYER_WEAPON } from './config.js';
 import { t } from './ui/messages.js';
+import { ParticleSystem } from './systems/particles.js';
+import { LightingSystem } from './systems/lighting.js';
 
-function createInputState(){
+function createInputState() {
   return {
     drag: {
       active: false,
@@ -17,7 +19,7 @@ function createInputState(){
   };
 }
 
-function createGameState(){
+function createGameState() {
   return {
     coins: 0,
     time: 0,
@@ -31,8 +33,8 @@ function createGameState(){
     },
     stations: {
       gather: { level: 1, busyUntil: 0, queue: 0, baseMs: 1600, workStart: 0, workDuration: 0 },
-      craft:  { level: 1, busyUntil: 0, queue: 0, baseMs: 2000, workStart: 0, workDuration: 0 },
-      trap:   { level: 1, busyUntil: 0, queue: 0, baseMs: 1400, workStart: 0, workDuration: 0 },
+      craft: { level: 1, busyUntil: 0, queue: 0, baseMs: 2000, workStart: 0, workDuration: 0 },
+      trap: { level: 1, busyUntil: 0, queue: 0, baseMs: 1400, workStart: 0, workDuration: 0 },
     },
     orderConfig: {
       maxConcurrent: 1,
@@ -66,17 +68,17 @@ export const state = {
 
   // 入力（キーボード / ドラッグターゲット）
   keys: new Set(),
-  moveTarget: { active:false, x:0, y:0 }, // 互換残置（未使用化）
-  dragState: { active:false, started:false, startX:0, startY:0 }, // 互換残置（未使用化）
+  moveTarget: { active: false, x: 0, y: 0 }, // 互換残置（未使用化）
+  dragState: { active: false, started: false, startX: 0, startY: 0 }, // 互換残置（未使用化）
   input: createInputState(),
 
   // カメラ・ワールド
   world: { ...WORLD },
-  cam: { x:0, y:0 },
+  cam: { x: 0, y: 0 },
 
   // エンティティ
-  player: { 
-    x:200, y:400, r:12, sp:2.0, hp:100, cold:100, hasSpear:false, atk:10, atkCD:0,
+  player: {
+    x: 200, y: 400, r: 12, sp: 2.0, hp: 100, cold: 100, hasSpear: false, atk: 10, atkCD: 0,
     // sprite anim state (initialized lazily; images loaded in main)
     anim: {
       state: PLAYER_STATE.IDLE,
@@ -86,13 +88,13 @@ export const state = {
       timer: 0,
       fps: 10,
       loop: true,
-      grid: { cols:4, rows:3 },
+      grid: { cols: 4, rows: 3 },
       image: null,
       sheetKey: 'idle'
     }
   },
-  fire:   { x:220, y:420, r:18, heat:70, embers:0 },
-  inv:    { wood:0, meat:0 },
+  fire: { x: 220, y: 420, r: 18, heat: 70, embers: 0 },
+  inv: { wood: 0, meat: 0 },
 
   // Images and sprite handles
   images: {},
@@ -100,13 +102,13 @@ export const state = {
     objects: {
       treeAlive: null,
       treeStump: null,
-      woodDrop:  null,
-      meatDrop:  null,
+      woodDrop: null,
+      meatDrop: null,
     }
   },
 
   trees: [],
-  bear:  { x:1600, y:900, r:18, hp:150, alive:true, aggro:false, inv:0 },
+  bear: { x: 1600, y: 900, r: 18, hp: 150, alive: true, aggro: false, inv: 0 },
   drops: [],
   snow: [],
 
@@ -117,44 +119,48 @@ export const state = {
   // ゲーム状態
   gameOver: false,
   game: createGameState(),
+
+  // Visual Effects
+  particles: new ParticleSystem(),
+  lighting: new LightingSystem(),
 };
 
-export function initState({ canvas, ctx, ui }){
+export function initState({ canvas, ctx, ui }) {
   state.canvas = canvas;
   state.ctx = ctx;
   state.ui = ui;
   state.game = createGameState();
-  if(state.input?.drag){
+  if (state.input?.drag) {
     Object.assign(state.input.drag, createInputState().drag);
   }
 
   // キー
-  document.addEventListener('keydown', e=>{ state.keys.add(e.key); });
-  document.addEventListener('keyup',   e=>{ state.keys.delete(e.key); });
+  document.addEventListener('keydown', e => { state.keys.add(e.key); });
+  document.addEventListener('keyup', e => { state.keys.delete(e.key); });
 
   // ツリー
   state.trees.length = 0;
-  for(let i=0;i<45;i++){
-    state.trees.push({ x: 300+ Math.random()*1600, y: 200+Math.random()*1000, hp: 30});
+  for (let i = 0; i < 45; i++) {
+    state.trees.push({ x: 300 + Math.random() * 1600, y: 200 + Math.random() * 1000, hp: 30 });
   }
 
   // 雪
-  state.snow = Array.from({length:120},()=>({
-    x: Math.random()*state.world.w,
-    y: Math.random()*state.world.h,
-    r: 1.2+Math.random()*1.4,
-    drift: 0.4+Math.random()*0.6,
-    speed: 0.6+Math.random()*0.8
+  state.snow = Array.from({ length: 120 }, () => ({
+    x: Math.random() * state.world.w,
+    y: Math.random() * state.world.h,
+    r: 1.2 + Math.random() * 1.4,
+    drift: 0.4 + Math.random() * 0.6,
+    speed: 0.6 + Math.random() * 0.8
   }));
 
   log(t('tips.drag'));
 }
 
-export function restart(){
+export function restart() {
   const { player, inv, trees, bear, drops, fire, ui } = state;
-  player.x=200; player.y=400; player.hp=100; player.cold=100; player.hasSpear=false; player.atk=10; player.atkCD=0;
+  player.x = 200; player.y = 400; player.hp = 100; player.cold = 100; player.hasSpear = false; player.atk = 10; player.atkCD = 0;
   // reset anim
-  if(player.anim){
+  if (player.anim) {
     player.anim.state = PLAYER_STATE.IDLE;
     player.anim.weapon = PLAYER_WEAPON.NONE;
     player.anim.dir = 'left';
@@ -162,24 +168,13 @@ export function restart(){
     player.anim.timer = 0;
     player.anim.fps = 10;
     player.anim.loop = true;
-    player.anim.grid = { cols:4, rows:3 };
+    player.anim.grid = { cols: 4, rows: 3 };
     player.anim.image = null;
     player.anim.sheetKey = 'idle';
   }
-  inv.wood=0; inv.meat=0; ui.bearHud.style.display='none';
-  trees.forEach(t=>t.hp = Math.random()<0.5? 30:20);
-  bear.x=1600; bear.y=900; bear.hp=150; bear.alive=true; bear.aggro=false; bear.inv=0;
-  drops.length=0;
-  fire.heat = 70; fire.embers = 0;
-  state.gameOver = false;
-  state.game = createGameState();
-  if(state.input?.drag){
-    Object.assign(state.input.drag, createInputState().drag);
-  }
-  log('再開！');
 }
 
 // NOTE: 互換維持用（呼び出し元は ui/hud.js の log に置換済み）
-export function log(msg){
-  if(state.ui?.log) state.ui.log.textContent = msg;
+export function log(msg) {
+  if (state.ui?.log) state.ui.log.textContent = msg;
 }
