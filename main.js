@@ -1,12 +1,22 @@
-import { FIXED_DT, MAX_STEPS, BASE_W, BASE_H, ASSETS } from './src/config.js';
+import {
+  FIXED_DT,
+  MAX_STEPS,
+  BASE_W,
+  BASE_H,
+  ASSETS,
+  ANIM,
+  IDLE_SHEETS,
+  WALK_SHEETS,
+  PLAYER_ICON,
+} from './src/config.js';
 import { loadImage } from './src/utils.js';
-import { ANIM, WALK_SHEETS, PLAYER_ICON } from './src/config.js';
 import { state, initState, restart } from './src/state.js';
 import { attachPointer } from './src/input/pointer.js';
 import { updateFrame } from './src/systems/update.js';
 import { renderFrame } from './src/systems/render.js';
 import { craftSpear, buyUpgrade } from './src/systems/actions.js';
 import { installAudioUnlock } from './src/systems/audio.js';
+import { applyDirectionalIdleSprite } from './src/systems/player-idle.js';
 import { showGameOver } from './src/ui/hud.js';
 
 async function loadResources(){
@@ -89,6 +99,14 @@ async function loadResources(){
       ANIM.hurt.sheet,
       ANIM.dead.sheet,
       ANIM.cold.sheet,
+      IDLE_SHEETS.none.up,
+      IDLE_SHEETS.none.down,
+      IDLE_SHEETS.none.left,
+      IDLE_SHEETS.none.right,
+      IDLE_SHEETS.spear.up,
+      IDLE_SHEETS.spear.down,
+      IDLE_SHEETS.spear.left,
+      IDLE_SHEETS.spear.right,
       WALK_SHEETS.none.up,
       WALK_SHEETS.none.down,
       WALK_SHEETS.none.left,
@@ -119,6 +137,7 @@ async function loadResources(){
 
   if(state.player?.anim){
     state.player.anim.image = state.assets.images[ANIM.idle.sheet] ?? null;
+    applyDirectionalIdleSprite();
   }
   console.info('[PBG] player assets loaded:', Object.keys(state.assets.images).length);
 
@@ -169,6 +188,7 @@ async function loadResources(){
       let steps = 0;
       while (acc >= FIXED_DT && steps < MAX_STEPS){
         updateFrame(FIXED_DT);
+        applyDirectionalIdleSprite();
         acc -= FIXED_DT;
         steps++;
       }
