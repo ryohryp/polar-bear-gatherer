@@ -1,21 +1,17 @@
 import { state } from '../state.js';
 import { log } from '../ui/hud.js';
 import { pushInput } from './line.js';
+import { playSfx } from './audio.js';
 
 function getGame(rootState){
   return (rootState && rootState.game) || state.game;
-}
-
-function playSfx(name){
-  // TODO: サウンド実装時に接続
-  void name;
 }
 
 export function maybeSpawnOrders(rootState = state, now = performance.now()){
   const game = getGame(rootState);
   if(!game?.flags?.modeOrderRush) return null;
 
-  const activeCount = game.orders.reduce((acc, o)=> acc + (o.status === 'active' ? 1 : 0), 0);
+  const activeCount = game.orders.reduce((acc, order)=> acc + (order.status === 'active' ? 1 : 0), 0);
   if(activeCount >= game.orderConfig.maxConcurrent) return null;
 
   const needSpear = 1 + Math.floor(game.difficulty / 2);
@@ -74,14 +70,18 @@ export function tickOrders(dt, rootState = state, now = performance.now()){
       const reward = order.need.spear * game.orderConfig.rewardPerSpear;
       game.coins += reward;
       game.completedOrders++;
-      game.events.push({ type:'orderDone', orderId: order.id, reward });
+      game.events.push({
+        type:'orderDone',
+        orderId: order.id,
+        reward,
+        spears: order.need.spear,
+      });
       log(`注文 #${order.id} 完了！ +${reward}c`, { holdMs: 2000 });
       playSfx('ok');
     }
   }
 
-  const before = game.orders.length;
-  if(before){
+  if(game.orders.length){
     game.orders = game.orders.filter(order => {
       if(order.status === 'active') return true;
       return now < (order.clearAt || 0);

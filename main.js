@@ -6,16 +6,17 @@ import { attachPointer } from './src/input/pointer.js';
 import { updateFrame } from './src/systems/update.js';
 import { renderFrame } from './src/systems/render.js';
 import { craftSpear, buyUpgrade } from './src/systems/actions.js';
+import { installAudioUnlock } from './src/systems/audio.js';
 import { showGameOver } from './src/ui/hud.js';
 
 async function loadResources(){
   try {
     state.sprites.objects.treeAlive = await loadImage(ASSETS.objects.treeAlive);
     state.sprites.objects.treeStump = await loadImage(ASSETS.objects.treeStump);
-    state.sprites.objects.woodDrop  = await loadImage(ASSETS.objects.woodDrop);
-    state.sprites.objects.meatDrop  = await loadImage(ASSETS.objects.meatDrop);
-  } catch (e) {
-    console.warn('Failed to load some resources:', e);
+    state.sprites.objects.woodDrop = await loadImage(ASSETS.objects.woodDrop);
+    state.sprites.objects.meatDrop = await loadImage(ASSETS.objects.meatDrop);
+  } catch (error) {
+    console.warn('Failed to load some resources:', error);
   }
 }
 
@@ -50,7 +51,8 @@ async function loadResources(){
     cvs.style.width = cssWidth + 'px';
     cvs.style.height = cssHeight + 'px';
   }
-  addEventListener('resize', resize); resize();
+  addEventListener('resize', resize);
+  resize();
 
   // Preload resource object images before game init
   await loadResources();
@@ -70,12 +72,12 @@ async function loadResources(){
       btnCraft: document.getElementById('btnCraft'),
       btnUpgradeCraft: document.getElementById('btnUpgradeCraft'),
       btnRestart: document.getElementById('btnRestart'),
-    }
+    },
   });
 
   // Prepare asset cache map
   state.assets = state.assets || {};
-  state.assets.images = {};
+  state.assets.images = state.assets.images || {};
 
   // Preload player-related sheets and icon
   try {
@@ -107,43 +109,58 @@ async function loadResources(){
     ]);
     const list = Array.from(sheets);
     await Promise.all(list.map(src =>
-      loadImage(src).then(img=>{ state.assets.images[src] = img; }).catch(()=>{})
+      loadImage(src)
+        .then(img => { state.assets.images[src] = img; })
+        .catch(() => {}),
     ));
   } catch (_) {
     // continue even if some fail
   }
-  // Set initial player anim image (idle)
+
   if(state.player?.anim){
     state.player.anim.image = state.assets.images[ANIM.idle.sheet] ?? null;
   }
-  console.info("[PBG] player assets loaded:", Object.keys(state.assets.images).length);
+  console.info('[PBG] player assets loaded:', Object.keys(state.assets.images).length);
+
+  // ブラウザの自動再生制限に合わせ、最初の操作で8bit効果音を有効化
+  installAudioUnlock(document);
 
   // 入力（ドラッグのみ移動／長押し無効）
   attachPointer();
 
   // UIイベント
   state.ui.btnCraft.addEventListener('click', craftSpear);
-  state.ui.btnCraft.addEventListener('touchstart', e=>{ e.preventDefault(); craftSpear(); }, {passive:false});
+  state.ui.btnCraft.addEventListener('touchstart', event => {
+    event.preventDefault();
+    craftSpear();
+  }, {passive:false});
 
   if(state.ui.btnUpgradeCraft){
-    const triggerUpgrade = ()=>{ buyUpgrade('craft'); };
+    const triggerUpgrade = () => { buyUpgrade('craft'); };
     state.ui.btnUpgradeCraft.addEventListener('click', triggerUpgrade);
-    state.ui.btnUpgradeCraft.addEventListener('touchstart', e=>{ e.preventDefault(); triggerUpgrade(); }, {passive:false});
+    state.ui.btnUpgradeCraft.addEventListener('touchstart', event => {
+      event.preventDefault();
+      triggerUpgrade();
+    }, {passive:false});
   }
 
   if (state.ui.btnRestart){
-    const triggerRestart = ()=>{
+    const triggerRestart = () => {
       if(!state.gameOver) return;
       showGameOver(false);
       restart();
     };
     state.ui.btnRestart.addEventListener('click', triggerRestart);
-    state.ui.btnRestart.addEventListener('touchstart', e=>{ e.preventDefault(); triggerRestart(); }, {passive:false});
+    state.ui.btnRestart.addEventListener('touchstart', event => {
+      event.preventDefault();
+      triggerRestart();
+    }, {passive:false});
   }
 
   // 固定タイムステップループ
   (function(){
-    let acc = 0, last = performance.now();
+    let acc = 0;
+    let last = performance.now();
     function frame(now){
       let delta = (now - last) / 1000;
       if (delta > 0.25) delta = 0.25;
@@ -152,7 +169,8 @@ async function loadResources(){
       let steps = 0;
       while (acc >= FIXED_DT && steps < MAX_STEPS){
         updateFrame(FIXED_DT);
-        acc -= FIXED_DT; steps++;
+        acc -= FIXED_DT;
+        steps++;
       }
       renderFrame(acc / FIXED_DT);
       requestAnimationFrame(frame);
@@ -160,9 +178,9 @@ async function loadResources(){
     requestAnimationFrame(frame);
   })();
 
-  // 参照されるキー操作（Rで再開）だけここで束ねる
-  document.addEventListener('keydown', (e)=>{
-    if((e.key==='r'||e.key==='R') && state.player.hp<=0){
+  // Rで再開
+  document.addEventListener('keydown', event => {
+    if((event.key === 'r' || event.key === 'R') && state.player.hp <= 0){
       showGameOver(false);
       restart();
     }

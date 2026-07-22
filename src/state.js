@@ -53,6 +53,7 @@ function createGameState() {
   };
 }
 
+<<<<<<< HEAD
 function createCampState() {
   return {
     center: { x: 500, y: 420 },
@@ -95,6 +96,54 @@ function createSnow() {
   return Array.from({ length: 120 }, () => ({
     x: Math.random() * WORLD.w,
     y: Math.random() * WORLD.h,
+=======
+function resetPlayer(player){
+  Object.assign(player, {
+    x: 200,
+    y: 400,
+    r: 12,
+    sp: 2.0,
+    hp: 100,
+    cold: 100,
+    hasSpear: false,
+    atk: 10,
+    atkCD: 0,
+    moving: false,
+    dir: 4,
+  });
+
+  if(player.anim){
+    Object.assign(player.anim, {
+      state: PLAYER_STATE.IDLE,
+      weapon: PLAYER_WEAPON.NONE,
+      dir: 'left',
+      frame: 0,
+      timer: 0,
+      fps: ANIM.idle.fps,
+      loop: ANIM.idle.loop,
+      grid: { ...ANIM.idle.grid },
+      image: state.assets?.images?.[ANIM.idle.sheet] ?? null,
+      sheetKey: 'idle',
+    });
+  }
+}
+
+function populateTrees(){
+  state.trees.length = 0;
+  for(let i = 0; i < 45; i++){
+    state.trees.push({
+      x: 300 + Math.random() * 1600,
+      y: 200 + Math.random() * 1000,
+      hp: 30,
+    });
+  }
+}
+
+function populateSnow(){
+  state.snow = Array.from({ length: 120 }, () => ({
+    x: Math.random() * state.world.w,
+    y: Math.random() * state.world.h,
+>>>>>>> origin/main
     r: 1.2 + Math.random() * 1.4,
     drift: 0.4 + Math.random() * 0.6,
     speed: 0.6 + Math.random() * 0.8,
@@ -123,6 +172,7 @@ export const state = {
   cam: { x: 0, y: 0, shake: 0 },
 
   player: {
+<<<<<<< HEAD
     x: 500,
     y: 515,
     r: 12,
@@ -133,6 +183,12 @@ export const state = {
     atk: 10,
     atkCD: 0,
     moving: false,
+=======
+    x: 200, y: 400, r: 12, sp: 2.0, hp: 100, cold: 100, hasSpear: false, atk: 10, atkCD: 0,
+    moving: false,
+    dir: 4,
+    // sprite anim state (initialized lazily; images loaded in main)
+>>>>>>> origin/main
     anim: {
       state: PLAYER_STATE.IDLE,
       weapon: PLAYER_WEAPON.NONE,
@@ -149,6 +205,10 @@ export const state = {
   fire: { x: 500, y: 440, r: 18, heat: 70, embers: 0 },
   inv: { wood: 0, meat: 0 },
 
+<<<<<<< HEAD
+=======
+  // Images and sprite handles
+>>>>>>> origin/main
   assets: { images: {} },
   images: {},
   sprites: {
@@ -161,7 +221,11 @@ export const state = {
   },
 
   trees: [],
+<<<<<<< HEAD
   bear: { x: 1600, y: 900, r: 22, hp: 150, alive: true, aggro: false, inv: 0 },
+=======
+  bear: { x: 1600, y: 900, r: 18, hp: 150, maxHp: 150, alive: true, aggro: false, inv: 0 },
+>>>>>>> origin/main
   drops: [],
   snow: [],
 
@@ -176,6 +240,7 @@ export const state = {
   lighting: new LightingSystem(),
 };
 
+<<<<<<< HEAD
 function resetPlayer() {
   const player = state.player;
   player.x = 500;
@@ -198,7 +263,66 @@ function resetPlayer() {
     player.anim.grid = { cols: 4, rows: 3 };
     player.anim.sheetKey = 'idle';
     player.anim.image = state.assets?.images?.[ANIM.idle.sheet] ?? null;
+=======
+export function initState({ canvas, ctx, ui }) {
+  state.canvas = canvas;
+  state.ctx = ctx;
+  state.ui = ui;
+
+  // キー
+  document.addEventListener('keydown', e => { state.keys.add(e.key); });
+  document.addEventListener('keyup', e => { state.keys.delete(e.key); });
+
+  restart();
+}
+
+export function restart() {
+  state.gameOver = false;
+  state.keys.clear();
+  const freshInput = createInputState();
+  if(state.input?.drag){
+    Object.assign(state.input.drag, freshInput.drag);
+  } else {
+    state.input = freshInput;
+>>>>>>> origin/main
   }
+  state.moveTarget.active = false;
+  state.dragState.active = false;
+  state.dragState.started = false;
+
+  state.cam.x = 0;
+  state.cam.y = 0;
+  state.cam.shake = 0;
+
+  resetPlayer(state.player);
+  Object.assign(state.fire, { x: 220, y: 420, r: 18, heat: 70, embers: 0 });
+  Object.assign(state.inv, { wood: 0, meat: 0 });
+  Object.assign(state.bear, {
+    x: 1600,
+    y: 900,
+    r: 18,
+    hp: 150,
+    maxHp: 150,
+    alive: true,
+    aggro: false,
+    inv: 0,
+  });
+
+  state.drops.length = 0;
+  populateTrees();
+  populateSnow();
+  state.autoChopCooldown = 0;
+  state.autoFeedCooldown = 0;
+  state.game = createGameState();
+
+  if(state.particles?.particles) state.particles.particles.length = 0;
+  state.lighting?.reset?.();
+
+  if(state.ui?.bear) state.ui.bear.style.width = '100%';
+  if(state.ui?.bearHud) state.ui.bearHud.style.display = 'none';
+  if(state.ui?.btnRestart) state.ui.btnRestart.disabled = true;
+
+  log(t('tips.drag'));
 }
 
 function resetWorld() {
