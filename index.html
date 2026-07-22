@@ -3,45 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Polar Bear Gatherer — Mobile Optimized</title>
+  <title>Polar Bear Gatherer — Ice Camp</title>
   <link rel="stylesheet" href="./styles.css">
-  <meta name="x-pbg-version" content="pbg-mvp-split-20251012-01" />
+  <meta name="x-pbg-version" content="pbg-ice-camp-20260720-01" />
 </head>
 <body>
   <canvas id="game" width="960" height="540"></canvas>
   <div id="ui">
     <div class="hud">
       <div class="meter">
-        <span>HP</span>
+        <span>たいりょく</span>
         <div class="bar hp"><i id="hpFill" style="width:100%"></i></div>
       </div>
       <div class="meter">
-        <span>温度</span>
+        <span>ぬくもり</span>
         <div class="bar tmp"><i id="tmpFill" style="width:100%"></i></div>
       </div>
       <div class="meter">
-        <span>焚き火</span>
+        <span>たき火</span>
         <div class="bar fire"><i id="fireFill" style="width:100%"></i></div>
       </div>
     </div>
     <div class="bearhp" id="bearHud" style="display:none">
-      <span style="font-weight:600">BEAR</span>
+      <span>ホッキョクグマ</span>
       <div class="bar"><i id="bearFill" style="width:100%"></i></div>
     </div>
-    <div class="inv" id="inv">木材: 0 / 10で槍クラフト [C]<br>肉: 0</div>
-    <div class="log" id="log">画面ドラッグで移動。Cで槍クラフト。伐採・攻撃・焚き火への木材投入は自動。倒木は◎、木は▲。焚き火●で体温回復。</div>
+    <div class="inv" id="inv">木材 0<br>肉 0</div>
+    <div class="log" id="log">キャンプの周りで木を集めよう。施設では住人たちが自動で働きます。</div>
     <div class="btns">
-      <button id="btnCraft">槍クラフト</button>
-      <button id="btnUpgradeCraft">CRAFT LvUP</button>
+      <button id="btnCraft">槍を作る</button>
+      <button id="btnUpgradeCraft">工房を強化</button>
     </div>
-    <div class="hint">画面をドラッグで移動／伐採・攻撃・焚き火投入は自動</div>
-    <!-- GameOver Overlay -->
+    <div class="hint">ドラッグ／WASDで移動　近づくと伐採・拾得・攻撃</div>
     <div id="gameOver" class="overlay" style="display:none">
       <div class="overlay-inner">
         <div class="title">GAME OVER</div>
-        <div class="subtitle">Rキー または 下のボタンで再開</div>
+        <div class="subtitle">キャンプを立て直して、もう一度挑戦しよう</div>
         <div class="actions">
-          <button id="btnRestart">再開する</button>
+          <button id="btnRestart">はじめから</button>
         </div>
       </div>
     </div>

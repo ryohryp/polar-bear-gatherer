@@ -14,29 +14,42 @@ import {
 } from './actions.js';
 import { tickLine } from './line.js';
 import { maybeSpawnOrders, tickOrders, raiseDifficulty } from './orders.js';
+<<<<<<< HEAD
+import { announceCampEvent, updateCampVisuals } from './camp.js';
+=======
 import { playSfx } from './audio.js';
+>>>>>>> origin/main
 
 export function updateFrame(dt) {
   const { keys, player, world, fire, bear, input, game } = state;
   const nowMs = performance.now();
 
+<<<<<<< HEAD
+=======
   // === GameOver時はゲームロジックを停止し、死亡アニメだけ進める ===
+>>>>>>> origin/main
   if (state.gameOver) {
     updatePlayerAnim(player, 0, 0);
     state.particles.update(dt);
     updateHud();
+    updateCampVisuals(dt, nowMs);
     return;
   }
+
   game.time += dt;
 
+<<<<<<< HEAD
+=======
   // 移動
+>>>>>>> origin/main
   const up = keys.has('w') || keys.has('ArrowUp');
   const dn = keys.has('s') || keys.has('ArrowDown');
   const lt = keys.has('a') || keys.has('ArrowLeft');
   const rt = keys.has('d') || keys.has('ArrowRight');
   const sp = player.sp;
 
-  let vx = 0, vy = 0;
+  let vx = 0;
+  let vy = 0;
   const drag = input?.drag;
   if (drag?.active && drag.moved) {
     vx = drag.dirX * sp;
@@ -48,21 +61,24 @@ export function updateFrame(dt) {
     if (rt) vx += sp;
   }
 
+<<<<<<< HEAD
+  player.moving = vx !== 0 || vy !== 0;
+=======
   player.moving = (vx !== 0 || vy !== 0);
+>>>>>>> origin/main
   updatePlayerDir(player, vx, vy);
   player.x = clamp(player.x + vx, 0, world.w);
   player.y = clamp(player.y + vy, 0, world.h);
-
-  // === Player anim: 8-dir quantize and sheet selection ===
   updatePlayerAnim(player, vx, vy);
 
   if (state.autoChopCooldown > 0) state.autoChopCooldown--;
   if (state.autoFeedCooldown > 0) state.autoFeedCooldown--;
 
-  // 温度/HP/焚き火
   const distToFire = dist(player, fire);
   const nearFire = distToFire < 60 && fire.heat > 0;
-  player.cold += nearFire ? 0.25 + fire.heat * 0.004 : -(0.04 + (100 - fire.heat) * 0.0006);
+  player.cold += nearFire
+    ? 0.25 + fire.heat * 0.004
+    : -(0.04 + (100 - fire.heat) * 0.0006);
   player.cold = clamp(player.cold, 0, 100);
   if (nearFire && player.hp < 100) player.hp += 0.06;
   player.hp = clamp(player.hp, 0, 100);
@@ -70,51 +86,73 @@ export function updateFrame(dt) {
   fire.heat = clamp(fire.heat - 0.018, 0, 100);
   if (fire.embers > 0) fire.embers--;
 
-  // 自動攻撃（近接）
   if (bear.alive && player.atkCD <= 0 && dist(player, bear) < 34) {
     tryAttackBear();
   }
 
-  // 自動伐採
   if (state.autoChopCooldown <= 0) {
-    if (tryChopNearestTree('auto')) state.autoChopCooldown = player.hasSpear ? 18 : 24;
+    if (tryChopNearestTree('auto')) {
+      state.autoChopCooldown = player.hasSpear ? 18 : 24;
+      state.cam.shake = Math.max(state.cam.shake || 0, 0.8);
+    }
   }
 
-  // 自動拾得
   pickupDrops('auto');
 
-  // 自動くべ
   const needsFuel = fire.heat < 70 || fire.embers < 10;
   if (state.autoFeedCooldown <= 0 && distToFire < 50 && needsFuel) {
     if (feedFire(true)) state.autoFeedCooldown = 120;
   }
 
-  // Order rush systems
   if (game.flags.modeOrderRush) {
     tickLine(dt, state, nowMs);
     tickOrders(dt, state, nowMs);
     game.orderCheckTimer += dt;
+
     while (game.orderCheckTimer >= 1) {
       maybeSpawnOrders(state, nowMs);
       raiseDifficulty(state);
       game.orderCheckTimer -= 1;
     }
+
     if (game.events.length) {
+<<<<<<< HEAD
+      for (const event of game.events) {
+        if (event.type === 'orderFail') {
+          applyOrderPenalty(event.penalty);
+=======
       for (const evt of game.events) {
         if (evt.type === 'orderFail') {
           applyOrderPenalty(evt.penalty);
         } else if (evt.type === 'orderDone') {
           applyOrderBattleImpact({ reward:evt.reward, spears:evt.spears });
+>>>>>>> origin/main
         }
+        announceCampEvent(event);
       }
       game.events.length = 0;
     }
   }
 
-  // Bear AI
+  updateCampVisuals(dt, nowMs);
+
   if (bear.alive && bear.aggro) {
     const dx = player.x - bear.x;
     const dy = player.y - bear.y;
+<<<<<<< HEAD
+    const distance = Math.hypot(dx, dy);
+    const speed = 1.1 + (player.hasSpear ? 0.2 : 0);
+
+    if (distance > 1) {
+      bear.x += dx / distance * speed;
+      bear.y += dy / distance * speed;
+    }
+
+    if (distance < 26 && bear.inv <= 0) {
+      player.hp -= 8;
+      bear.inv = 35;
+      state.cam.shake = Math.max(state.cam.shake || 0, 5);
+=======
     const d = Math.hypot(dx, dy);
     const speed = 1.1 + (player.hasSpear ? 0.2 : 0);
     if (d > 1) {
@@ -140,6 +178,7 @@ export function updateFrame(dt) {
         });
       }
       playSfx('hurt');
+>>>>>>> origin/main
       log(t('bear.attack'));
     }
     if (bear.inv > 0) bear.inv--;
@@ -151,6 +190,9 @@ export function updateFrame(dt) {
   if (player.hp <= 0 && !state.gameOver) {
     player.hp = 0;
     state.gameOver = true;
+<<<<<<< HEAD
+    if (player.anim) player.anim.state = PLAYER_STATE.DEAD;
+=======
     if(player.anim){
       player.anim.state = PLAYER_STATE.DEAD;
       player.anim.frame = 0;
@@ -158,32 +200,36 @@ export function updateFrame(dt) {
     }
     updatePlayerAnim(player, 0, 0);
     playSfx('ng');
+>>>>>>> origin/main
     log(t('death'), { holdMs: 5000 });
     showGameOver(true);
     updateHud();
     return;
   }
 
-  // UI
   updateHud();
   const btnUpgrade = state.ui?.btnUpgradeCraft;
   if (btnUpgrade) {
     const station = game.stations.craft;
     const cost = 20 * station.level;
-    btnUpgrade.textContent = `CRAFT LvUP (${cost}c)`;
+    btnUpgrade.textContent = `工房 Lv.${station.level + 1} (${cost}G)`;
     btnUpgrade.disabled = state.game.coins < cost;
   }
 
+<<<<<<< HEAD
+  if (state.keys.has('C') || state.keys.has('c')) {
+    state.keys.delete('C');
+    state.keys.delete('c');
+=======
   // Cキーでクラフト
   if (state.keys.has('C')) {
     state.keys.delete('C');
+>>>>>>> origin/main
     craftSpear();
   }
 
-  // Update particles
   state.particles.update(dt);
 
-  // Spawn ambient snow
   const cam = state.cam;
   if (Math.random() < 0.3) {
     const sx = cam.x + Math.random() * 960;
@@ -196,7 +242,6 @@ export function updateFrame(dt) {
     });
   }
 
-  // Fire particles
   if (fire.heat > 0 && Math.random() < 0.15) {
     state.particles.spawn('ember', fire.x + (Math.random() - 0.5) * 10, fire.y - 5, {
       life: 1.5 + Math.random(),
@@ -214,7 +259,10 @@ export function updatePlayerDir(player, vx, vy) {
   const angle = Math.atan2(vy, vx);
   const deg = (angle * 180 / Math.PI + 360) % 360;
 
+<<<<<<< HEAD
+=======
   // --- 6方向シート用に丸めた角度分割（旧スプライト互換） ---
+>>>>>>> origin/main
   if (deg >= 330 || deg < 30) player.dir = 2;
   else if (deg < 90) player.dir = 1;
   else if (deg < 150) player.dir = 0;
@@ -251,7 +299,18 @@ function selectSheet(player) {
   }
 
   const image = state.assets?.images?.[cfg.sheet] || null;
+<<<<<<< HEAD
+  return {
+    image,
+    frames: cfg.frames,
+    fps: cfg.fps,
+    loop: cfg.loop,
+    grid: cfg.grid,
+    sheetKey,
+  };
+=======
   return { image, frames:cfg.frames, fps:cfg.fps, loop:cfg.loop, grid:cfg.grid, sheetKey };
+>>>>>>> origin/main
 }
 
 function quantize8Dir(vx, vy, prevDir) {
@@ -285,10 +344,16 @@ function updatePlayerAnim(player, vx, vy) {
   anim.weapon = player.hasSpear ? PLAYER_WEAPON.SPEAR : PLAYER_WEAPON.NONE;
   anim.dir = quantize8Dir(vx, vy, anim.dir);
 
+<<<<<<< HEAD
+  if (![PLAYER_STATE.ATTACK, PLAYER_STATE.HURT, PLAYER_STATE.DEAD].includes(anim.state)) {
+    if (player.cold < 18 && !player.moving) anim.state = PLAYER_STATE.COLD;
+    else anim.state = player.moving ? PLAYER_STATE.WALK : PLAYER_STATE.IDLE;
+=======
   if(player.hp <= 0){
     anim.state = PLAYER_STATE.DEAD;
   } else if(anim.state !== PLAYER_STATE.ATTACK && anim.state !== PLAYER_STATE.HURT){
     anim.state = nextAmbientState(player);
+>>>>>>> origin/main
   }
 
   const beforeKey = anim.sheetKey;
@@ -299,6 +364,31 @@ function updatePlayerAnim(player, vx, vy) {
   anim.grid = chosen.grid;
   anim.sheetKey = chosen.sheetKey;
 
+<<<<<<< HEAD
+  anim.timer += 1;
+  const frameThreshold = Math.max(1, Math.floor(60 / (anim.fps || 1)));
+  if (anim.timer >= frameThreshold) {
+    anim.timer = 0;
+    anim.frame += 1;
+  }
+
+  if (anim.loop) {
+    anim.frame = chosen.frames > 0 ? anim.frame % chosen.frames : 0;
+  } else {
+    const last = Math.max(0, chosen.frames - 1);
+    if (anim.frame >= last) {
+      anim.frame = last;
+      if (anim.state === PLAYER_STATE.ATTACK || anim.state === PLAYER_STATE.HURT) {
+        anim.state = player.moving ? PLAYER_STATE.WALK : PLAYER_STATE.IDLE;
+      }
+    }
+  }
+
+  if (anim.sheetKey !== beforeKey) {
+    anim.frame = 0;
+    anim.timer = 0;
+  }
+=======
   if (anim.sheetKey !== beforeKey) {
     anim.frame = 0;
     anim.timer = 0;
@@ -326,4 +416,5 @@ function updatePlayerAnim(player, vx, vy) {
       anim.timer = 0;
     }
   }
+>>>>>>> origin/main
 }

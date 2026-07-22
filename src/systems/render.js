@@ -1,384 +1,344 @@
 import { state } from '../state.js';
 import { t } from '../ui/messages.js';
 import { clamp, drawFrame } from '../utils.js';
-import { BASE_W, BASE_H, SPRITE } from '../config.js';
+import { BASE_W, BASE_H, SPRITE, SIZES } from '../config.js';
 import { renderHUD } from '../ui/hud.js';
-// src/systems/render.js
-import { SPRITES } from '../config.js';
-import { SIZES } from '../config.js';
+import { drawSnowField, drawCamp, drawCampPopups } from './camp.js';
 
-const playerSprite = {
-  img: new Image(),
-  ready: false,
-  frameW: 0,
-  frameH: 0
-};
-playerSprite.img.onload = () => {
-  const cfg = SPRITES.player;
-  // 画像実寸から自動算出（512x512 / 4x4 想定）
-  playerSprite.frameW = Math.floor(playerSprite.img.width / cfg.cols);
-  playerSprite.frameH = Math.floor(playerSprite.img.height / cfg.rows);
-  playerSprite.ready = true;
-  console.info('[sprite] player loaded',
-    playerSprite.img.width, 'x', playerSprite.img.height,
-    '=> cell', playerSprite.frameW, 'x', playerSprite.frameH);
-};
-playerSprite.img.src = SPRITES.player.src;
-
-// --- 方向スプライト: 4x4/16スタイルシートに対応 ---
-// 1-4: 下, 5-6: 右下, 7-10: 右, 11-12: 右上, 13-16: 上
-// 左・左上・左下は右系の水平反転で対応
-// dir: 0=下, 1=右下, 2=右, 3=上, 4=左, 5=左下 (現状6方向)
-const FRAMES = {
-  down: [{ c: 0, r: 0 }, { c: 1, r: 0 }, { c: 2, r: 0 }, { c: 3, r: 0 }],     // 1..4
-  rightdown: [{ c: 0, r: 1 }, { c: 1, r: 1 }],                             // 5..6
-  right: [{ c: 2, r: 1 }, { c: 3, r: 1 }, { c: 0, r: 2 }, { c: 1, r: 2 }],       // 7..10
-  rightup: [{ c: 2, r: 2 }, { c: 3, r: 2 }],                             // 11..12（未使用）
-  up: [{ c: 0, r: 3 }, { c: 1, r: 3 }, { c: 2, r: 3 }, { c: 3, r: 3 }],       // 13..16
-};
-
-function getAnimForDir(dir) {
-  const d = ((dir | 0) % 6 + 6) % 6; // 0..5
-  switch (d) {
-    case 0: return { frames: FRAMES.down, flip: false };
-    case 1: return { frames: FRAMES.rightdown, flip: false };
-    case 2: return { frames: FRAMES.right, flip: false };
-    case 3: return { frames: FRAMES.up, flip: false };
-    case 4: return { frames: FRAMES.right, flip: true }; // 左 = 右の反転
-    case 5: return { frames: FRAMES.rightdown, flip: true }; // 左下 = 右下の反転
-    default: return { frames: FRAMES.down, flip: false };
-  }
-}
-
-// New sprite-based player renderer (32x32 sheets)
-function drawPlayerNew(ctx, player) {
+function drawPlayer(ctx, player) {
   const size = SPRITE.SIZE;
   const dx = Math.floor(player.x - size / 2);
   const dy = Math.floor(player.y - size / 2);
   const anim = player.anim;
-  if (!anim || !anim.image) {
+
+  if (!anim?.image) {
     ctx.save();
-    ctx.fillStyle = '#223';
-    ctx.fillRect(dx, dy, size, size);
-    ctx.strokeStyle = '#889';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + size, dy + size); ctx.moveTo(dx + size, dy); ctx.lineTo(dx, dy + size); ctx.stroke();
+    ctx.fillStyle = '#17213a';
+    ctx.fillRect(dx + 8, dy + 4, 16, 25);
+    ctx.fillStyle = '#f2e8d2';
+    ctx.fillRect(dx + 7, dy + 2, 18, 7);
+    ctx.fillStyle = '#77a5c6';
+    ctx.fillRect(dx + 9, dy + 10, 14, 13);
     ctx.restore();
     return;
   }
+
   drawFrame(ctx, anim.image, anim.frame | 0, anim.grid, dx, dy, size);
 }
 
-export function drawPlayer(ctx, player) {
-  if (!playerSprite.ready) return;
-  const fw = playerSprite.frameW;
-  const fh = playerSprite.frameH;
-  const dir = Math.max(0, Math.min(7, player.dir | 0));
-  const anim = getAnimForDir(dir);
-  const frames = anim.frames;
-  const isMoving = !!player.moving;
-  const now = performance.now();
-  const period = frames.length === 2 ? 180 : 120; // 2枚はやや遅め、4枚は標準
-  const idx = isMoving ? (Math.floor(now / period) % frames.length) : 0;
-  const frame = frames[idx];
-  const sx = frame.c * fw;
-  const sy = frame.r * fh;
-  const dx = Math.floor(player.x - fw / 2);
-  const dy = Math.floor(player.y - fh / 2);
-
-  if (anim.flip) {
-    ctx.save();
-    ctx.translate(dx + fw, dy);
-    ctx.scale(-1, 1);
-    ctx.drawImage(playerSprite.img, sx, sy, fw, fh, 0, 0, fw, fh);
-    ctx.restore();
-  } else {
-    ctx.drawImage(playerSprite.img, sx, sy, fw, fh, dx, dy, fw, fh);
+function drawTreeShadows(ctx, trees) {
+  ctx.fillStyle = 'rgba(23,33,58,0.22)';
+  for (const tree of trees) {
+    if (tree.hp <= 0) continue;
+    ctx.fillRect(Math.round(tree.x - 17), Math.round(tree.y - 3), 34, 8);
   }
 }
 
-export function renderFrame(alpha) {
-  const { ctx, cam, world, fire, trees, drops, bear, player, screen, game, particles, lighting } = state;
-  const { width, height, scale, offsetX, offsetY } = screen;
-  const frameNow = performance.now();
-
-  // Update lighting
-  lighting.reset();
-  // Fire light
-  if (fire.heat > 0) {
-    const flicker = Math.sin(frameNow / 100) * 5 + Math.cos(frameNow / 230) * 5;
-    lighting.addLight(fire.x, fire.y, 180 + flicker, 'rgba(255, 160, 60, 0.15)', 1.0);
-    lighting.addLight(fire.x, fire.y, 80 + flicker * 0.5, 'rgba(255, 100, 20, 0.2)', 1.0);
-  }
-  // Player light (lantern/torch feel if needed, or just personal glow)
-  lighting.addLight(player.x, player.y, 100, 'rgba(200, 220, 255, 0.05)', 0.8);
-
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, width || BASE_W, height || BASE_H);
-  ctx.fillStyle = '#0e1730';
-  ctx.fillRect(0, 0, width || BASE_W, height || BASE_H);
-
-  // Screen shake (if implemented in state, otherwise 0)
-  const shakeX = state.cam.shake ? (Math.random() - 0.5) * state.cam.shake : 0;
-  const shakeY = state.cam.shake ? (Math.random() - 0.5) * state.cam.shake : 0;
-  if (state.cam.shake > 0) state.cam.shake *= 0.9; // decay
-  if (state.cam.shake < 0.5) state.cam.shake = 0;
-
-  ctx.setTransform(scale, 0, 0, scale, offsetX + shakeX, offsetY + shakeY);
-  ctx.clearRect(0, 0, BASE_W, BASE_H);
-
-  // camera
-  cam.x = clamp(player.x - BASE_W / 2, 0, world.w - BASE_W);
-  cam.y = clamp(player.y - BASE_H / 2, 0, world.h - BASE_H);
-
-  // bg
-  ctx.fillStyle = '#0e1730';
-  ctx.fillRect(0, 0, BASE_W, BASE_H);
-
-  ctx.save();
-  ctx.translate(-cam.x, -cam.y);
-
-  // tiles
-  for (let x = 0; x < world.w; x += 80) {
-    for (let y = 0; y < world.h; y += 80) {
-      ctx.fillStyle = '#132149';
-      ctx.fillRect(x, y, 78, 78);
-    }
-  }
-
-  // Shadows
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  // Tree shadows
-  for (const t of trees) {
-    if (t.hp <= 0) continue; // stumps have small shadow?
-    ctx.beginPath();
-    ctx.ellipse(t.x, t.y + 5, 16, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Bear shadow
-  if (bear.alive) {
-    ctx.beginPath();
-    ctx.ellipse(bear.x, bear.y + bear.r - 5, bear.r, bear.r * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Player shadow
-  ctx.beginPath();
-  ctx.ellipse(player.x, player.y + 12, 12, 6, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-
-  // fire
-  ctx.fillStyle = fire.heat > 0 ? '#ff9b3d' : '#3a3a4a';
-  ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r, 0, Math.PI * 2); ctx.fill();
-  if (fire.heat > 0) {
-    const pulse = 1 + Math.sin(frameNow / 160) * 0.08;
-    ctx.fillStyle = '#ffc97a';
-    ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r * 0.55 * pulse, 0, Math.PI * 2); ctx.fill();
-    if (fire.embers > 0) {
-      ctx.strokeStyle = 'rgba(255,219,120,0.75)';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(fire.x, fire.y, fire.r + fire.embers * 0.03, 0, Math.PI * 2); ctx.stroke();
-    }
-  }
-
-  // trees (image sprites; fallback to shapes if not ready)
-  for (const t of trees) {
-    const alive = t.hp > 0;
-    const img = alive ? state.sprites.objects.treeAlive : state.sprites.objects.treeStump;
-    if (img) {
+function drawTrees(ctx, trees) {
+  for (const tree of trees) {
+    const alive = tree.hp > 0;
+    const image = alive ? state.sprites.objects.treeAlive : state.sprites.objects.treeStump;
+    if (image) {
       const size = alive ? SIZES.TREE_ALIVE : SIZES.TREE_STUMP;
-      const dx = Math.floor(t.x - size.w / 2);
-      const dy = Math.floor(t.y - size.h);
-      ctx.drawImage(img, dx, dy, size.w, size.h);
+      const dx = Math.floor(tree.x - size.w / 2);
+      const dy = Math.floor(tree.y - size.h);
+      ctx.drawImage(image, dx, dy, size.w, size.h);
+      continue;
+    }
+
+    if (alive) {
+      ctx.fillStyle = '#425e51';
+      ctx.fillRect(tree.x - 3, tree.y - 17, 6, 18);
+      ctx.fillStyle = '#3b7b66';
+      ctx.fillRect(tree.x - 13, tree.y - 34, 26, 22);
+      ctx.fillStyle = '#78a58a';
+      ctx.fillRect(tree.x - 9, tree.y - 30, 12, 5);
     } else {
-      if (!alive) {
-        ctx.fillStyle = '#7b5b42';
-        ctx.beginPath(); ctx.arc(t.x, t.y, 8, 0, Math.PI * 2); ctx.fill(); // stump
-      } else {
-        ctx.fillStyle = '#2e8b57';
-        ctx.beginPath(); ctx.moveTo(t.x, t.y - 12); ctx.lineTo(t.x - 10, t.y + 10); ctx.lineTo(t.x + 10, t.y + 10); ctx.closePath(); ctx.fill();
-      }
+      ctx.fillStyle = '#724b2f';
+      ctx.fillRect(tree.x - 7, tree.y - 8, 14, 9);
+      ctx.fillStyle = '#c28c55';
+      ctx.fillRect(tree.x - 5, tree.y - 7, 10, 3);
     }
   }
+}
 
-  // drops (image sprites; fallback to circles)
-  for (const d of drops) {
-    let img = null, sz = SIZES.WOOD;
-    if (d.type === 'wood') { img = state.sprites.objects.woodDrop; }
-    else if (d.type === 'meat') { img = state.sprites.objects.meatDrop; sz = SIZES.MEAT; }
-    if (img) {
-      const dx = Math.floor(d.x - sz.w / 2);
-      const dy = Math.floor(d.y - sz.h / 2);
-      ctx.drawImage(img, dx, dy, sz.w, sz.h);
-    } else {
-      ctx.fillStyle = d.type === 'wood' ? '#c48b54' : '#ff647a';
-      ctx.beginPath(); ctx.arc(d.x, d.y, 6, 0, Math.PI * 2); ctx.fill();
-    }
-  }
+function drawFire(ctx, fire, now) {
+  ctx.save();
+  ctx.translate(Math.round(fire.x), Math.round(fire.y));
 
-  // bear
-  if (bear.alive) {
-    ctx.fillStyle = '#e6f1ff';
-    ctx.beginPath(); ctx.arc(bear.x, bear.y, bear.r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#c6d4ff';
-    ctx.beginPath(); ctx.arc(bear.x + 6, bear.y - 4, 4, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // player (new sprite renderer)
-  drawPlayerNew(ctx, player);
-
-  // Particles
-  particles.render(ctx, cam);
-
+  ctx.fillStyle = 'rgba(23,33,58,0.24)';
+  ctx.fillRect(-24, 12, 48, 8);
+  ctx.fillStyle = '#68452f';
+  ctx.save();
+  ctx.rotate(0.35);
+  ctx.fillRect(-20, 6, 40, 8);
+  ctx.restore();
+  ctx.save();
+  ctx.rotate(-0.35);
+  ctx.fillRect(-20, 6, 40, 8);
   ctx.restore();
 
-  // Lighting overlay
-  lighting.render(ctx, cam, screen);
-
-  // goal text
-  if (!player.hasSpear) {
-    drawText(t('goal.craft'), BASE_W / 2, 60);
-    drawText(t('goal.fire'), BASE_W / 2, 84);
-  } else if (bear.alive) {
-    drawText(t('goal.kill'), BASE_W / 2, 60);
-    drawText(t('goal.safe'), BASE_W / 2, 84);
+  if (fire.heat > 0) {
+    const bob = Math.round(Math.sin(now / 90) * 2);
+    ctx.fillStyle = '#d75832';
+    ctx.fillRect(-11, -13 + bob, 22, 25);
+    ctx.fillStyle = '#f09a39';
+    ctx.fillRect(-7, -22 - bob, 14, 29);
+    ctx.fillStyle = '#ffe36d';
+    ctx.fillRect(-3, -13 + bob, 7, 17);
   } else {
-    drawText(t('goal.clear'), BASE_W / 2, 60);
+    ctx.fillStyle = '#4a4a55';
+    ctx.fillRect(-8, -4, 16, 10);
   }
 
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (game.flags.modeOrderRush) {
-    drawOrdersHud(frameNow);
-    drawStationsHud(frameNow);
-    drawInventoryHud();
-    renderHUD(ctx);
+  ctx.restore();
+}
+
+function drawDrops(ctx, drops, now) {
+  const bob = Math.round(Math.sin(now / 140) * 2);
+  for (const drop of drops) {
+    let image = null;
+    let size = SIZES.WOOD;
+    if (drop.type === 'wood') image = state.sprites.objects.woodDrop;
+    else if (drop.type === 'meat') {
+      image = state.sprites.objects.meatDrop;
+      size = SIZES.MEAT;
+    }
+
+    if (image) {
+      ctx.drawImage(
+        image,
+        Math.floor(drop.x - size.w / 2),
+        Math.floor(drop.y - size.h / 2 + bob),
+        size.w,
+        size.h,
+      );
+    } else {
+      ctx.fillStyle = drop.type === 'wood' ? '#9c643c' : '#d85c67';
+      ctx.fillRect(drop.x - 6, drop.y - 6 + bob, 12, 12);
+    }
   }
 }
 
-function drawText(t, x, y) {
-  const { ctx } = state;
+function drawBear(ctx, bear, now) {
+  if (!bear.alive) return;
+
+  const bob = Math.round(Math.sin(now / 160) * 2);
   ctx.save();
-  ctx.font = '16px system-ui, sans-serif';
+  ctx.translate(Math.round(bear.x), Math.round(bear.y + bob));
+
+  ctx.fillStyle = 'rgba(23,33,58,0.28)';
+  ctx.fillRect(-24, 18, 48, 8);
+  ctx.fillStyle = '#9eabc2';
+  ctx.fillRect(-22, -12, 44, 33);
+  ctx.fillStyle = '#eef4f6';
+  ctx.fillRect(-18, -18, 36, 35);
+  ctx.fillRect(-15, 13, 10, 12);
+  ctx.fillRect(5, 13, 10, 12);
+  ctx.fillRect(-21, -20, 10, 10);
+  ctx.fillRect(11, -20, 10, 10);
+  ctx.fillStyle = '#d8e5ea';
+  ctx.fillRect(-10, -8, 20, 14);
+  ctx.fillStyle = '#17213a';
+  ctx.fillRect(-9, -10, 4, 4);
+  ctx.fillRect(5, -10, 4, 4);
+  ctx.fillRect(-3, -2, 6, 4);
+
+  if (bear.aggro) {
+    ctx.fillStyle = '#d64f4f';
+    ctx.fillRect(-12, -27, 7, 4);
+    ctx.fillRect(5, -27, 7, 4);
+  }
+
+  ctx.restore();
+}
+
+function drawGoalPanel(ctx) {
+  const { player, bear, game } = state;
+  let line1 = '';
+  let line2 = '';
+
+  if (!player.hasSpear) {
+    line1 = t('goal.craft');
+    line2 = '住人の生産ラインも手伝ってくれる';
+  } else if (bear.alive) {
+    line1 = t('goal.kill');
+    line2 = t('goal.safe');
+  } else {
+    line1 = t('goal.clear');
+    line2 = `注文達成 ${game.completedOrders}件`;
+  }
+
+  ctx.save();
+  ctx.font = 'bold 13px monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'white';
-  ctx.fillText(t, x, y);
+  const width = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width) + 30;
+  const x = BASE_W / 2 - width / 2;
+  const y = player.hasSpear && bear.alive ? 68 : 14;
+  ctx.fillStyle = '#17213a';
+  ctx.fillRect(Math.round(x - 3), y - 3, Math.round(width + 6), 48);
+  ctx.fillStyle = '#fff2c7';
+  ctx.fillRect(Math.round(x), y, Math.round(width), 42);
+  ctx.fillStyle = '#17213a';
+  ctx.fillText(line1, BASE_W / 2, y + 16);
+  ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = '#5f5037';
+  ctx.fillText(line2, BASE_W / 2, y + 33);
   ctx.restore();
 }
 
 function drawOrdersHud(now) {
   const { ctx, screen, game } = state;
-  if (!game.orders || game.orders.length === 0) {
-    return;
-  }
+  if (!game.orders?.length) return;
+
   ctx.save();
   ctx.translate(screen.offsetX, screen.offsetY);
   ctx.scale(screen.scale, screen.scale);
-  const width = 208;
-  const height = 54;
-  const gap = 10;
-  let y = 112;
-  ctx.font = '12px system-ui, sans-serif';
+
+  let y = 128;
+  const x = 14;
+  const width = 210;
+  const height = 58;
+  ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'left';
+
   for (const order of game.orders) {
-    ctx.fillStyle = order.status === 'fail'
-      ? 'rgba(200,64,96,0.4)'
+    const panelColor = order.status === 'fail'
+      ? '#eaa29a'
       : order.status === 'done'
-        ? 'rgba(72,180,128,0.42)'
-        : 'rgba(20,36,64,0.78)';
-    ctx.fillRect(16, y, width, height);
-    ctx.strokeStyle = 'rgba(86,122,196,0.65)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(16, y, width, height);
+        ? '#a8d59c'
+        : '#fff2c7';
 
-    ctx.fillStyle = '#e4edff';
-    ctx.fillText(`#${order.id} 進捗 ${order.progress}/${order.need.spear}`, 24, y + 18);
+    ctx.fillStyle = '#17213a';
+    ctx.fillRect(x - 3, y - 3, width + 6, height + 6);
+    ctx.fillStyle = panelColor;
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = '#17213a';
+    ctx.fillText(`依頼 #${order.id}  槍 ${order.progress}/${order.need.spear}`, x + 10, y + 17);
+
     const reward = order.need.spear * game.orderConfig.rewardPerSpear;
-    ctx.fillText(`報酬 +${reward}c`, 24, y + 36);
+    ctx.fillText(`報酬 ${reward}G`, x + 10, y + 34);
 
-    const barX = 24;
-    const barY = y + height - 12;
-    const barW = width - 16;
-    ctx.fillStyle = 'rgba(255,255,255,0.14)';
-    ctx.fillRect(barX, barY, barW, 6);
+    const barX = x + 10;
+    const barY = y + 43;
+    const barW = width - 20;
+    ctx.fillStyle = '#17213a';
+    ctx.fillRect(barX - 2, barY - 2, barW + 4, 9);
+    ctx.fillStyle = '#c5b78d';
+    ctx.fillRect(barX, barY, barW, 5);
+
     let ratio = 0;
     if (order.status === 'active') {
-      const remain = order.expiresAt - now;
-      ratio = clamp(order.duration > 0 ? remain / order.duration : 0, 0, 1);
-      ctx.fillStyle = '#ff9460';
+      ratio = clamp((order.expiresAt - now) / order.duration, 0, 1);
+      ctx.fillStyle = ratio < 0.3 ? '#d95f57' : '#e6a64d';
     } else if (order.status === 'done') {
       ratio = 1;
-      ctx.fillStyle = '#6df3a6';
-    } else {
-      ratio = 0;
-      ctx.fillStyle = '#ff6384';
+      ctx.fillStyle = '#5fa85e';
     }
-    ctx.fillRect(barX, barY, barW * ratio, 6);
-
-    y += height + gap;
+    ctx.fillRect(barX, barY, Math.round(barW * ratio), 5);
+    y += height + 10;
   }
-  ctx.restore();
-}
 
-function drawStationsHud(now) {
-  const { ctx, screen, game } = state;
-  ctx.save();
-  ctx.translate(screen.offsetX, screen.offsetY);
-  ctx.scale(screen.scale, screen.scale);
-  const stations = [
-    { key: 'gather', label: 'GATHER', color: '#66c0ff' },
-    { key: 'craft', label: 'CRAFT', color: '#7be27f' },
-    { key: 'trap', label: 'TRAP', color: '#ffb366' },
-  ];
-  const boxW = 180;
-  const boxH = 60;
-  const gap = 14;
-  const total = stations.length * boxW + (stations.length - 1) * gap;
-  const startX = (BASE_W - total) / 2;
-  const y = BASE_H - 82;
-  ctx.font = '12px system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  stations.forEach((info, idx) => {
-    const st = game.stations[info.key];
-    if (!st) return;
-    const x = startX + idx * (boxW + gap);
-    ctx.fillStyle = 'rgba(16,28,52,0.82)';
-    ctx.fillRect(x, y, boxW, boxH);
-    ctx.strokeStyle = 'rgba(86,122,196,0.6)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, boxW, boxH);
-
-    ctx.fillStyle = '#e0ecff';
-    ctx.fillText(info.label, x + 12, y + 18);
-    ctx.fillText(`Lv.${st.level}`, x + 12, y + 36);
-    ctx.fillText(`待ち: ${st.queue}`, x + 12, y + 52);
-
-    const barX = x + 90;
-    const barY = y + boxH - 16;
-    const barW = boxW - 102;
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(barX, barY, barW, 8);
-    if (st.busyUntil > now && st.workDuration > 0) {
-      const ratio = clamp(1 - (st.busyUntil - now) / st.workDuration, 0, 1);
-      ctx.fillStyle = info.color;
-      ctx.fillRect(barX, barY, barW * ratio, 8);
-    }
-  });
   ctx.restore();
 }
 
 function drawInventoryHud() {
   const { ctx, screen, game } = state;
   if (!game.inventory) return;
+
   ctx.save();
   ctx.translate(screen.offsetX, screen.offsetY);
   ctx.scale(screen.scale, screen.scale);
-  const x = BASE_W - 16;
-  let y = 112;
-  ctx.font = '13px system-ui, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#e8f2ff';
-  ctx.fillText(`Coins: ${game.coins}`, x, y);
-  y += 18;
-  ctx.fillText(`Wood: ${game.inventory.wood} / Spear: ${game.inventory.spear}`, x, y);
+
+  const width = 202;
+  const x = BASE_W - width - 14;
+  const y = 106;
+  ctx.fillStyle = '#17213a';
+  ctx.fillRect(x - 3, y - 3, width + 6, 47);
+  ctx.fillStyle = '#fff2c7';
+  ctx.fillRect(x, y, width, 41);
+  ctx.fillStyle = '#17213a';
+  ctx.font = 'bold 12px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`資金 ${game.coins}G`, x + 10, y + 16);
+  ctx.fillText(`倉庫  木材${game.inventory.wood}  槍${game.inventory.spear}`, x + 10, y + 33);
   ctx.restore();
+}
+
+export function renderFrame(alpha) {
+  const {
+    ctx,
+    cam,
+    world,
+    fire,
+    trees,
+    drops,
+    bear,
+    player,
+    screen,
+    game,
+    particles,
+    lighting,
+  } = state;
+  const { width, height, scale, offsetX, offsetY } = screen;
+  const now = performance.now();
+
+  lighting.reset();
+  if (fire.heat > 0) {
+    const flicker = Math.sin(now / 100) * 5 + Math.cos(now / 230) * 5;
+    lighting.addLight(fire.x, fire.y, 180 + flicker, 'rgba(255,160,60,0.17)', 1);
+    lighting.addLight(fire.x, fire.y, 80 + flicker * 0.5, 'rgba(255,100,20,0.22)', 1);
+  }
+  lighting.addLight(player.x, player.y, 90, 'rgba(210,230,255,0.06)', 0.8);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, width || BASE_W, height || BASE_H);
+  ctx.fillStyle = '#0c1730';
+  ctx.fillRect(0, 0, width || BASE_W, height || BASE_H);
+
+  const shakeX = cam.shake ? Math.round((Math.random() - 0.5) * cam.shake) : 0;
+  const shakeY = cam.shake ? Math.round((Math.random() - 0.5) * cam.shake) : 0;
+  if (cam.shake > 0) cam.shake *= 0.88;
+  if (cam.shake < 0.3) cam.shake = 0;
+
+  ctx.setTransform(scale, 0, 0, scale, offsetX + shakeX, offsetY + shakeY);
+  ctx.clearRect(0, 0, BASE_W, BASE_H);
+
+  cam.x = clamp(player.x - BASE_W / 2, 0, world.w - BASE_W);
+  cam.y = clamp(player.y - BASE_H / 2, 0, world.h - BASE_H);
+
+  ctx.save();
+  ctx.translate(-cam.x, -cam.y);
+
+  drawSnowField(ctx, cam, world);
+  drawCamp(ctx, now);
+  drawTreeShadows(ctx, trees);
+
+  ctx.fillStyle = 'rgba(23,33,58,0.22)';
+  ctx.fillRect(Math.round(player.x - 13), Math.round(player.y + 10), 26, 7);
+  if (bear.alive) ctx.fillRect(Math.round(bear.x - 26), Math.round(bear.y + 17), 52, 9);
+
+  drawFire(ctx, fire, now);
+  drawTrees(ctx, trees);
+  drawDrops(ctx, drops, now);
+  drawBear(ctx, bear, now);
+  drawPlayer(ctx, player);
+  particles.render(ctx, cam);
+  drawCampPopups(ctx);
+
+  ctx.restore();
+
+  lighting.render(ctx, cam, screen);
+
+  ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+  drawGoalPanel(ctx);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (game.flags.modeOrderRush) {
+    drawOrdersHud(now);
+    drawInventoryHud();
+    renderHUD(ctx);
+  }
+
+  void alpha;
 }
