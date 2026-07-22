@@ -11,6 +11,18 @@ export const STICK = { DEADZONE: 10, MAX_RADIUS: 72 };
 
 const PLAYER_BLUE_BASE = './assets/img/player/player_blue_base.svg';
 const PLAYER_BLUE_SPEAR = './assets/img/player/player_blue_spear.svg';
+const PLAYER_BLUE_WALK = {
+  up: './assets/img/player/player_blue_walk_up.png',
+  down: './assets/img/player/player_blue_walk_down.png',
+  left: './assets/img/player/player_blue_walk_left.png',
+  right: './assets/img/player/player_blue_walk_right.png',
+};
+const PLAYER_BLUE_SPEAR_WALK = {
+  up: './assets/img/player/player_blue_spear_walk_up.png',
+  down: './assets/img/player/player_blue_spear_walk_down.png',
+  left: './assets/img/player/player_blue_spear_walk_left.png',
+  right: './assets/img/player/player_blue_spear_walk_right.png',
+};
 
 export const SPRITES = {
   player: { src: PLAYER_BLUE_BASE, cols: 2, rows: 2 },
@@ -51,24 +63,24 @@ export const ANIM = {
 
 export const WALK_SHEETS = {
   none: {
-    up:PLAYER_BLUE_BASE,
-    down:PLAYER_BLUE_BASE,
-    left:PLAYER_BLUE_BASE,
-    right:PLAYER_BLUE_BASE,
-    upleft:PLAYER_BLUE_BASE,
-    upright:PLAYER_BLUE_BASE,
-    downleft:PLAYER_BLUE_BASE,
-    downright:PLAYER_BLUE_BASE,
+    up:PLAYER_BLUE_WALK.up,
+    down:PLAYER_BLUE_WALK.down,
+    left:PLAYER_BLUE_WALK.left,
+    right:PLAYER_BLUE_WALK.right,
+    upleft:PLAYER_BLUE_WALK.left,
+    upright:PLAYER_BLUE_WALK.right,
+    downleft:PLAYER_BLUE_WALK.left,
+    downright:PLAYER_BLUE_WALK.right,
   },
   spear: {
-    up:PLAYER_BLUE_SPEAR,
-    down:PLAYER_BLUE_SPEAR,
-    left:PLAYER_BLUE_SPEAR,
-    right:PLAYER_BLUE_SPEAR,
-    upleft:PLAYER_BLUE_SPEAR,
-    upright:PLAYER_BLUE_SPEAR,
-    downleft:PLAYER_BLUE_SPEAR,
-    downright:PLAYER_BLUE_SPEAR,
+    up:PLAYER_BLUE_SPEAR_WALK.up,
+    down:PLAYER_BLUE_SPEAR_WALK.down,
+    left:PLAYER_BLUE_SPEAR_WALK.left,
+    right:PLAYER_BLUE_SPEAR_WALK.right,
+    upleft:PLAYER_BLUE_SPEAR_WALK.left,
+    upright:PLAYER_BLUE_SPEAR_WALK.right,
+    downleft:PLAYER_BLUE_SPEAR_WALK.left,
+    downright:PLAYER_BLUE_SPEAR_WALK.right,
   },
 };
 
