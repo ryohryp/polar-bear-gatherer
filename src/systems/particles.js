@@ -23,6 +23,37 @@ function drawBearFlash(ctx, particle) {
   ctx.restore();
 }
 
+function drawPlayerFlash(ctx, particle) {
+  ctx.save();
+  ctx.translate(Math.round(particle.x), Math.round(particle.y));
+  ctx.globalAlpha = particle.alpha;
+  ctx.fillStyle = particle.color;
+
+  // 48pxプレイヤーに重なる、輪郭を強調した赤い被弾シルエット
+  ctx.fillRect(-11, -22, 22, 10);
+  ctx.fillRect(-9, -15, 18, 24);
+  ctx.fillRect(-14, -12, 5, 18);
+  ctx.fillRect(9, -12, 5, 18);
+  ctx.fillRect(-8, 8, 6, 10);
+  ctx.fillRect(2, 8, 6, 10);
+
+  ctx.globalAlpha = particle.alpha * 0.65;
+  ctx.fillStyle = '#fff2c7';
+  ctx.fillRect(-7, -19, 14, 3);
+  ctx.fillRect(-4, -9, 8, 9);
+
+  if (particle.severe) {
+    ctx.globalAlpha = particle.alpha * 0.72;
+    ctx.fillStyle = '#ffccd0';
+    ctx.fillRect(-18, -17, 4, 4);
+    ctx.fillRect(14, -12, 4, 4);
+    ctx.fillRect(-17, 9, 3, 3);
+    ctx.fillRect(15, 7, 3, 3);
+  }
+
+  ctx.restore();
+}
+
 function drawDamageText(ctx, particle) {
   const progress = 1 - particle.life / particle.maxLife;
   const settleProgress = Math.min(1, progress / 0.28);
@@ -76,7 +107,7 @@ export class ParticleSystem {
     this.particles = [];
   }
 
-  // type: 'snow' | 'ember' | 'spark' | 'smoke' | 'text' | 'bearFlash' | 'damageText'
+  // type: snow | ember | spark | smoke | text | bearFlash | playerFlash | damageText
   spawn(type, x, y, options = {}) {
     const p = {
       type,
@@ -129,6 +160,10 @@ export class ParticleSystem {
         const progress = 1 - p.life / p.maxLife;
         const pulse = 0.55 + Math.abs(Math.cos(progress * Math.PI * 3)) * 0.45;
         p.alpha = Math.max(0, 1 - progress) * pulse;
+      } else if (p.type === 'playerFlash') {
+        const progress = 1 - p.life / p.maxLife;
+        const pulse = 0.45 + Math.abs(Math.cos(progress * Math.PI * 4)) * 0.55;
+        p.alpha = Math.max(0, 1 - progress) * pulse;
       } else if (p.type === 'damageText') {
         const progress = 1 - p.life / p.maxLife;
         p.vy *= Math.pow(0.985, dt * 60);
@@ -147,6 +182,8 @@ export class ParticleSystem {
 
       if (particle.type === 'bearFlash') {
         drawBearFlash(ctx, particle);
+      } else if (particle.type === 'playerFlash') {
+        drawPlayerFlash(ctx, particle);
       } else {
         drawStandardParticle(ctx, particle);
       }
