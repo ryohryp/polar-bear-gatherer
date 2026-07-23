@@ -16,7 +16,12 @@ import { tickLine } from './line.js';
 import { maybeSpawnOrders, tickOrders, raiseDifficulty } from './orders.js';
 import { announceCampEvent, updateCampVisuals } from './camp.js';
 import { playSfx } from './audio.js';
-import { consumeHitStopFrame, updateBearKnockback } from './combat-feedback.js';
+import {
+  consumeHitStopFrame,
+  triggerPlayerHurtFeedback,
+  updateBearKnockback,
+  updatePlayerKnockback,
+} from './combat-feedback.js';
 
 export function updateFrame(dt) {
   const { keys, player, world, fire, bear, input, game } = state;
@@ -38,6 +43,8 @@ export function updateFrame(dt) {
 
   game.time += dt;
 
+  const playerKnockedBack = updatePlayerKnockback();
+
   // 移動
   const up = keys.has('w') || keys.has('ArrowUp');
   const dn = keys.has('s') || keys.has('ArrowDown');
@@ -48,14 +55,16 @@ export function updateFrame(dt) {
   let vx = 0;
   let vy = 0;
   const drag = input?.drag;
-  if (drag?.active && drag.moved) {
-    vx = drag.dirX * sp;
-    vy = drag.dirY * sp;
-  } else {
-    if (up) vy -= sp;
-    if (dn) vy += sp;
-    if (lt) vx -= sp;
-    if (rt) vx += sp;
+  if (!playerKnockedBack) {
+    if (drag?.active && drag.moved) {
+      vx = drag.dirX * sp;
+      vy = drag.dirY * sp;
+    } else {
+      if (up) vy -= sp;
+      if (dn) vy += sp;
+      if (lt) vx -= sp;
+      if (rt) vx += sp;
+    }
   }
 
   player.moving = vx !== 0 || vy !== 0;
@@ -79,11 +88,11 @@ export function updateFrame(dt) {
   fire.heat = clamp(fire.heat - 0.018, 0, 100);
   if (fire.embers > 0) fire.embers--;
 
-  if (bear.alive && player.atkCD <= 0 && dist(player, bear) < 34) {
+  if (!playerKnockedBack && bear.alive && player.atkCD <= 0 && dist(player, bear) < 34) {
     tryAttackBear();
   }
 
-  if (state.autoChopCooldown <= 0) {
+  if (!playerKnockedBack && state.autoChopCooldown <= 0) {
     if (tryChopNearestTree('auto')) {
       state.autoChopCooldown = player.hasSpear ? 18 : 24;
       state.cam.shake = Math.max(state.cam.shake || 0, 0.8);
@@ -139,6 +148,11 @@ export function updateFrame(dt) {
       player.hp -= 8;
       bear.inv = 35;
       state.cam.shake = Math.max(state.cam.shake || 0, 7);
+      triggerPlayerHurtFeedback({
+        source: bear,
+        knockback: true,
+        severe: true,
+      });
       if (player.anim) {
         player.anim.state = PLAYER_STATE.HURT;
         player.anim.frame = 0;
