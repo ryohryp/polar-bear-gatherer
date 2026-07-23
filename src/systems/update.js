@@ -16,10 +16,16 @@ import { tickLine } from './line.js';
 import { maybeSpawnOrders, tickOrders, raiseDifficulty } from './orders.js';
 import { announceCampEvent, updateCampVisuals } from './camp.js';
 import { playSfx } from './audio.js';
+import { consumeHitStopFrame, updateBearKnockback } from './combat-feedback.js';
 
 export function updateFrame(dt) {
   const { keys, player, world, fire, bear, input, game } = state;
   const nowMs = performance.now();
+
+  if (consumeHitStopFrame()) {
+    updateHud();
+    return;
+  }
 
   // === GameOver時はゲームロジックを停止し、死亡アニメだけ進める ===
   if (state.gameOver) {
@@ -117,18 +123,19 @@ export function updateFrame(dt) {
 
   updateCampVisuals(dt, nowMs);
 
+  const bearKnockedBack = updateBearKnockback();
   if (bear.alive && bear.aggro) {
     const dx = player.x - bear.x;
     const dy = player.y - bear.y;
     const distance = Math.hypot(dx, dy);
     const speed = 1.1 + (player.hasSpear ? 0.2 : 0);
 
-    if (distance > 1) {
+    if (!bearKnockedBack && distance > 1) {
       bear.x += dx / distance * speed;
       bear.y += dy / distance * speed;
     }
 
-    if (distance < 26 && bear.inv <= 0) {
+    if (!bearKnockedBack && distance < 26 && bear.inv <= 0) {
       player.hp -= 8;
       bear.inv = 35;
       state.cam.shake = Math.max(state.cam.shake || 0, 7);
