@@ -229,13 +229,16 @@ export class ParticleSystem {
   render(ctx, cam) {
     ctx.save();
 
+    // 崩れ本体を最背面に固定し、白フラッシュと破片を前面へ重ねる。
     for (const particle of this.particles) {
-      if (particle.type === 'damageText') continue;
+      if (particle.type === 'bearCollapse') drawBearCollapse(ctx, particle);
+    }
+
+    for (const particle of this.particles) {
+      if (particle.type === 'damageText' || particle.type === 'bearCollapse') continue;
 
       if (particle.type === 'bearFlash') {
         drawBearFlash(ctx, particle);
-      } else if (particle.type === 'bearCollapse') {
-        drawBearCollapse(ctx, particle);
       } else if (particle.type === 'playerFlash') {
         drawPlayerFlash(ctx, particle);
       } else {
