@@ -12,6 +12,12 @@ const SPEAR_FLASH_LIFE = 0.16;
 const NORMAL_DAMAGE_TEXT_LIFE = 0.68;
 const SPEAR_DAMAGE_TEXT_LIFE = 0.78;
 
+const PLAYER_KNOCKBACK = 5.6;
+const PLAYER_KNOCKBACK_DAMPING = 0.58;
+const PLAYER_KNOCKBACK_EPSILON = 0.08;
+const PLAYER_FLASH_LIFE = 0.16;
+const PLAYER_SEVERE_FLASH_LIFE = 0.22;
+
 let observedGameState = state.game;
 
 function resetFeedbackState() {
@@ -22,6 +28,11 @@ function resetFeedbackState() {
   if (state.bear) {
     state.bear.knockbackVX = 0;
     state.bear.knockbackVY = 0;
+  }
+
+  if (state.player) {
+    state.player.knockbackVX = 0;
+    state.player.knockbackVY = 0;
   }
 }
 
@@ -39,6 +50,12 @@ function ensureFeedbackState() {
   if (bear) {
     if (!Number.isFinite(bear.knockbackVX)) bear.knockbackVX = 0;
     if (!Number.isFinite(bear.knockbackVY)) bear.knockbackVY = 0;
+  }
+
+  const player = state.player;
+  if (player) {
+    if (!Number.isFinite(player.knockbackVX)) player.knockbackVX = 0;
+    if (!Number.isFinite(player.knockbackVY)) player.knockbackVY = 0;
   }
 }
 
@@ -68,6 +85,43 @@ function spawnBearHitVisuals({ damage, hasSpear }) {
   });
 }
 
+function fallbackPlayerKnockbackVector(player) {
+  const dir = player?.anim?.dir || 'down';
+  if (dir.includes('left')) return { x: 1, y: 0 };
+  if (dir.includes('right')) return { x: -1, y: 0 };
+  if (dir.includes('up')) return { x: 0, y: 1 };
+  return { x: 0, y: -1 };
+}
+
+function playerKnockbackVector(player, source) {
+  if (!source || !Number.isFinite(source.x) || !Number.isFinite(source.y)) {
+    return fallbackPlayerKnockbackVector(player);
+  }
+
+  const dx = player.x - source.x;
+  const dy = player.y - source.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.001) return fallbackPlayerKnockbackVector(player);
+
+  return {
+    x: dx / distance,
+    y: dy / distance,
+  };
+}
+
+function spawnPlayerHurtVisual({ severe }) {
+  const { player, particles } = state;
+  if (!player || !particles) return;
+
+  particles.spawn('playerFlash', player.x, player.y, {
+    life: severe ? PLAYER_SEVERE_FLASH_LIFE : PLAYER_FLASH_LIFE,
+    color: severe ? '#ff5f67' : '#ff8a96',
+    vx: 0,
+    vy: 0,
+    severe,
+  });
+}
+
 export function triggerBearHitFeedback({ damage = 0, hasSpear = false } = {}) {
   ensureFeedbackState();
 
@@ -87,6 +141,25 @@ export function triggerBearHitFeedback({ damage = 0, hasSpear = false } = {}) {
   );
 
   spawnBearHitVisuals({ damage, hasSpear });
+}
+
+export function triggerPlayerHurtFeedback({
+  source = null,
+  knockback = true,
+  severe = false,
+} = {}) {
+  ensureFeedbackState();
+
+  const player = state.player;
+  if (!player) return;
+
+  if (knockback) {
+    const vector = playerKnockbackVector(player, source);
+    player.knockbackVX = vector.x * PLAYER_KNOCKBACK;
+    player.knockbackVY = vector.y * PLAYER_KNOCKBACK;
+  }
+
+  spawnPlayerHurtVisual({ severe });
 }
 
 export function consumeHitStopFrame() {
@@ -120,5 +193,31 @@ export function updateBearKnockback() {
   bear.y = clamp(bear.y + bear.knockbackVY, bear.r, world.h - bear.r);
   bear.knockbackVX *= KNOCKBACK_DAMPING;
   bear.knockbackVY *= KNOCKBACK_DAMPING;
+  return true;
+}
+
+export function updatePlayerKnockback() {
+  ensureFeedbackState();
+
+  const { player, world } = state;
+  if (!player || player.hp <= 0) {
+    if (player) {
+      player.knockbackVX = 0;
+      player.knockbackVY = 0;
+    }
+    return false;
+  }
+
+  const speed = Math.hypot(player.knockbackVX, player.knockbackVY);
+  if (speed < PLAYER_KNOCKBACK_EPSILON) {
+    player.knockbackVX = 0;
+    player.knockbackVY = 0;
+    return false;
+  }
+
+  player.x = clamp(player.x + player.knockbackVX, player.r, world.w - player.r);
+  player.y = clamp(player.y + player.knockbackVY, player.r, world.h - player.r);
+  player.knockbackVX *= PLAYER_KNOCKBACK_DAMPING;
+  player.knockbackVY *= PLAYER_KNOCKBACK_DAMPING;
   return true;
 }
