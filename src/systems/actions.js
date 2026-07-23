@@ -99,7 +99,7 @@ export function tryAttackBear(){
     const dmg = player.atk;
     bear.hp = Math.max(0, bear.hp - dmg);
     player.atkCD=18;
-    triggerBearHitFeedback({ hasSpear: player.hasSpear });
+    triggerBearHitFeedback({ damage: dmg, hasSpear: player.hasSpear });
     setBearHP(bearHpRate());
     playSfx('hit');
     cam.shake = Math.max(cam.shake || 0, 5);
