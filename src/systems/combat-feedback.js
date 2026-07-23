@@ -13,16 +13,23 @@ const NORMAL_DAMAGE_TEXT_LIFE = 0.68;
 const SPEAR_DAMAGE_TEXT_LIFE = 0.78;
 
 const PLAYER_KNOCKBACK = 5.6;
+const PLAYER_KNOCKBACK_START_OFFSET = 3;
 const PLAYER_KNOCKBACK_DAMPING = 0.58;
 const PLAYER_KNOCKBACK_EPSILON = 0.08;
 const PLAYER_FLASH_LIFE = 0.16;
 const PLAYER_SEVERE_FLASH_LIFE = 0.22;
+const PLAYER_HURT_FEEDBACK_GRACE_MS = 90;
 
 let observedGameState = state.game;
+
+function nowMs() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
 
 function resetFeedbackState() {
   state.combatFeedback = {
     hitStopFrames: 0,
+    lastPlayerHurtAt: Number.NEGATIVE_INFINITY,
   };
 
   if (state.bear) {
@@ -44,6 +51,10 @@ function ensureFeedbackState() {
 
   if (!state.combatFeedback) {
     resetFeedbackState();
+  }
+
+  if (!Number.isFinite(state.combatFeedback.lastPlayerHurtAt)) {
+    state.combatFeedback.lastPlayerHurtAt = Number.NEGATIVE_INFINITY;
   }
 
   const bear = state.bear;
@@ -150,16 +161,32 @@ export function triggerPlayerHurtFeedback({
 } = {}) {
   ensureFeedbackState();
 
-  const player = state.player;
+  const { player, world } = state;
   if (!player) return;
 
   if (knockback) {
     const vector = playerKnockbackVector(player, source);
+    player.x = clamp(
+      player.x + vector.x * PLAYER_KNOCKBACK_START_OFFSET,
+      player.r,
+      world.w - player.r,
+    );
+    player.y = clamp(
+      player.y + vector.y * PLAYER_KNOCKBACK_START_OFFSET,
+      player.r,
+      world.h - player.r,
+    );
     player.knockbackVX = vector.x * PLAYER_KNOCKBACK;
     player.knockbackVY = vector.y * PLAYER_KNOCKBACK;
   }
 
+  state.combatFeedback.lastPlayerHurtAt = nowMs();
   spawnPlayerHurtVisual({ severe });
+}
+
+export function wasPlayerHurtFeedbackRecently() {
+  ensureFeedbackState();
+  return nowMs() - state.combatFeedback.lastPlayerHurtAt <= PLAYER_HURT_FEEDBACK_GRACE_MS;
 }
 
 export function consumeHitStopFrame() {
