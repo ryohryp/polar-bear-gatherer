@@ -1,7 +1,10 @@
 import { IDLE_ANIM, IDLE_SHEETS, PLAYER_STATE, PLAYER_WEAPON } from '../config.js';
 import { state } from '../state.js';
+import { applyDirectionalAttackSprite } from './player-attack.js';
 
 export function applyDirectionalIdleSprite() {
+  applyDirectionalAttackSprite();
+
   const anim = state.player?.anim;
   if (!anim || anim.state !== PLAYER_STATE.IDLE) return;
 
