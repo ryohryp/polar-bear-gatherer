@@ -4,6 +4,7 @@ import { log, showBearHP, setBearHP } from '../ui/hud.js';
 import { t } from '../ui/messages.js';
 import { clamp, dist } from '../utils.js';
 import { playSfx } from './audio.js';
+import { triggerBearDefeatFinale } from './bear-defeat.js';
 import { triggerBearHitFeedback, triggerPlayerHurtFeedback } from './combat-feedback.js';
 
 function bearHpRate(){
@@ -14,6 +15,7 @@ function bearHpRate(){
 function defeatBear(messageKey = 'bear.kill'){
   const { bear, drops } = state;
   if(!bear.alive) return;
+  triggerBearDefeatFinale();
   bear.hp = 0;
   bear.alive = false;
   bear.aggro = false;

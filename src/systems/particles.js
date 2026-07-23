@@ -23,6 +23,58 @@ function drawBearFlash(ctx, particle) {
   ctx.restore();
 }
 
+function drawBearCollapse(ctx, particle) {
+  const progress = 1 - particle.life / particle.maxLife;
+  const impactProgress = Math.min(1, progress / 0.18);
+  const collapseProgress = Math.max(0, Math.min(1, (progress - 0.18) / 0.82));
+  const eased = 1 - Math.pow(1 - collapseProgress, 3);
+  const impactScale = 1 + Math.sin(impactProgress * Math.PI) * 0.09;
+  const scaleX = impactScale * (1 + eased * 0.2);
+  const scaleY = impactScale * Math.max(0.18, 1 - eased * 0.78);
+  const yOffset = eased * 18;
+  const rotation = (particle.fallDirection || 1) * eased * 0.16;
+  const alpha = progress < 0.68
+    ? 1
+    : Math.max(0, 1 - (progress - 0.68) / 0.32);
+
+  ctx.save();
+  ctx.translate(Math.round(particle.x), Math.round(particle.y));
+  ctx.globalAlpha = alpha * 0.3;
+  ctx.fillStyle = '#17213a';
+  ctx.scale(1 + eased * 0.35, Math.max(0.35, 1 - eased * 0.5));
+  ctx.fillRect(-24, 18, 48, 8);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(Math.round(particle.x), Math.round(particle.y + yOffset));
+  ctx.rotate(rotation);
+  ctx.scale(scaleX, scaleY);
+  ctx.globalAlpha = alpha;
+
+  ctx.fillStyle = '#9eabc2';
+  ctx.fillRect(-22, -12, 44, 33);
+  ctx.fillStyle = '#eef4f6';
+  ctx.fillRect(-18, -18, 36, 35);
+  ctx.fillRect(-15, 13, 10, 12);
+  ctx.fillRect(5, 13, 10, 12);
+  ctx.fillRect(-21, -20, 10, 10);
+  ctx.fillRect(11, -20, 10, 10);
+  ctx.fillStyle = '#d8e5ea';
+  ctx.fillRect(-10, -8, 20, 14);
+
+  ctx.fillStyle = '#5f6b80';
+  ctx.fillRect(-10, -10, 7, 2);
+  ctx.fillRect(-8, -12, 2, 6);
+  ctx.fillRect(3, -10, 7, 2);
+  ctx.fillRect(6, -12, 2, 6);
+  ctx.fillRect(-3, -2, 6, 3);
+
+  ctx.globalAlpha = alpha * (0.35 + impactProgress * 0.45);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-18, -19, 36, 2);
+  ctx.restore();
+}
+
 function drawPlayerFlash(ctx, particle) {
   ctx.save();
   ctx.translate(Math.round(particle.x), Math.round(particle.y));
@@ -107,7 +159,7 @@ export class ParticleSystem {
     this.particles = [];
   }
 
-  // type: snow | ember | spark | smoke | text | bearFlash | playerFlash | damageText
+  // type: snow | ember | spark | smoke | text | bearFlash | bearCollapse | playerFlash | damageText
   spawn(type, x, y, options = {}) {
     const p = {
       type,
@@ -177,8 +229,13 @@ export class ParticleSystem {
   render(ctx, cam) {
     ctx.save();
 
+    // 崩れ本体を最背面に固定し、白フラッシュと破片を前面へ重ねる。
     for (const particle of this.particles) {
-      if (particle.type === 'damageText') continue;
+      if (particle.type === 'bearCollapse') drawBearCollapse(ctx, particle);
+    }
+
+    for (const particle of this.particles) {
+      if (particle.type === 'damageText' || particle.type === 'bearCollapse') continue;
 
       if (particle.type === 'bearFlash') {
         drawBearFlash(ctx, particle);
