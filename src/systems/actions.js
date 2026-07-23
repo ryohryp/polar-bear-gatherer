@@ -4,7 +4,7 @@ import { log, showBearHP, setBearHP } from '../ui/hud.js';
 import { t } from '../ui/messages.js';
 import { clamp, dist } from '../utils.js';
 import { playSfx } from './audio.js';
-import { triggerBearHitFeedback } from './combat-feedback.js';
+import { triggerBearHitFeedback, triggerPlayerHurtFeedback } from './combat-feedback.js';
 
 function bearHpRate(){
   const maxHp = state.bear.maxHp || 150;
@@ -165,6 +165,7 @@ export function applyOrderPenalty(amount = 0){
   const dmg = Math.max(2, Math.round(amount * 0.5));
   state.player.hp = clamp(state.player.hp - dmg, 0, 100);
   state.cam.shake = Math.max(state.cam.shake || 0, 5);
+  triggerPlayerHurtFeedback({ knockback:false, severe:false });
   if(state.player.anim){
     state.player.anim.state = PLAYER_STATE.HURT;
     state.player.anim.frame = 0;
