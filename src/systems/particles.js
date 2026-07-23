@@ -25,12 +25,10 @@ function drawBearFlash(ctx, particle) {
 
 function drawDamageText(ctx, particle) {
   const progress = 1 - particle.life / particle.maxLife;
-  const punchProgress = Math.min(1, progress / 0.18);
-  const settleProgress = Math.min(1, Math.max(0, (progress - 0.18) / 0.24));
-  const punchScale = 0.72 + Math.sin(punchProgress * Math.PI * 0.5) * 0.68;
-  const scale = progress < 0.18
-    ? punchScale
-    : 1.4 - settleProgress * 0.4;
+  const settleProgress = Math.min(1, progress / 0.28);
+  const easeOut = 1 - Math.pow(1 - settleProgress, 3);
+  const startScale = particle.hasSpear ? 1.65 : 1.5;
+  const scale = startScale - (startScale - 1) * easeOut;
 
   ctx.save();
   ctx.translate(Math.round(particle.x), Math.round(particle.y));
