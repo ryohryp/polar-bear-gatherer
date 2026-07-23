@@ -16,6 +16,7 @@ import { updateFrame } from './src/systems/update.js';
 import { renderFrame } from './src/systems/render.js';
 import { craftSpear, buyUpgrade } from './src/systems/actions.js';
 import { installAudioUnlock } from './src/systems/audio.js';
+import { shouldSkipBearDefeatSlowMoStep } from './src/systems/bear-defeat.js';
 import { applyDirectionalIdleSprite } from './src/systems/player-idle.js';
 import { showGameOver } from './src/ui/hud.js';
 
@@ -187,8 +188,10 @@ async function loadResources(){
       acc += delta;
       let steps = 0;
       while (acc >= FIXED_DT && steps < MAX_STEPS){
-        updateFrame(FIXED_DT);
-        applyDirectionalIdleSprite();
+        if (!shouldSkipBearDefeatSlowMoStep()) {
+          updateFrame(FIXED_DT);
+          applyDirectionalIdleSprite();
+        }
         acc -= FIXED_DT;
         steps++;
       }
