@@ -1,5 +1,3 @@
-import { drawFrame } from '../utils.js';
-
 function drawBearFlash(ctx, particle) {
   ctx.save();
   ctx.translate(Math.round(particle.x), Math.round(particle.y));
@@ -55,6 +53,24 @@ function drawDamageText(ctx, particle) {
   }
 
   ctx.restore();
+}
+
+function drawStandardParticle(ctx, particle) {
+  ctx.globalAlpha = particle.alpha;
+  ctx.fillStyle = particle.color;
+
+  if (particle.type === 'text') {
+    ctx.font = 'bold 14px system-ui';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    ctx.strokeText(particle.text, particle.x, particle.y);
+    ctx.fillText(particle.text, particle.x, particle.y);
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 export class ParticleSystem {
@@ -127,37 +143,24 @@ export class ParticleSystem {
 
   render(ctx, cam) {
     ctx.save();
-    for (const p of this.particles) {
-      const sx = p.x - cam.x;
-      const sy = p.y - cam.y;
-      void sx;
-      void sy;
 
-      if (p.type === 'bearFlash') {
-        drawBearFlash(ctx, p);
-        continue;
-      }
+    for (const particle of this.particles) {
+      if (particle.type === 'damageText') continue;
 
-      if (p.type === 'damageText') {
-        drawDamageText(ctx, p);
-        continue;
-      }
-
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = p.color;
-
-      if (p.type === 'text') {
-        ctx.font = 'bold 14px system-ui';
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 2;
-        ctx.strokeText(p.text, p.x, p.y);
-        ctx.fillText(p.text, p.x, p.y);
+      if (particle.type === 'bearFlash') {
+        drawBearFlash(ctx, particle);
       } else {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
+        drawStandardParticle(ctx, particle);
       }
     }
+
+    for (const particle of this.particles) {
+      if (particle.type === 'damageText') {
+        drawDamageText(ctx, particle);
+      }
+    }
+
     ctx.restore();
+    void cam;
   }
 }
