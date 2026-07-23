@@ -7,6 +7,10 @@ const NORMAL_KNOCKBACK = 3.6;
 const SPEAR_KNOCKBACK = 5.4;
 const KNOCKBACK_DAMPING = 0.62;
 const KNOCKBACK_EPSILON = 0.08;
+const NORMAL_FLASH_LIFE = 0.12;
+const SPEAR_FLASH_LIFE = 0.16;
+const NORMAL_DAMAGE_TEXT_LIFE = 0.68;
+const SPEAR_DAMAGE_TEXT_LIFE = 0.78;
 
 let observedGameState = state.game;
 
@@ -38,7 +42,33 @@ function ensureFeedbackState() {
   }
 }
 
-export function triggerBearHitFeedback({ hasSpear = false } = {}) {
+function spawnBearHitVisuals({ damage, hasSpear }) {
+  const { bear, particles } = state;
+  if (!bear || !particles) return;
+
+  particles.spawn('bearFlash', bear.x, bear.y, {
+    life: hasSpear ? SPEAR_FLASH_LIFE : NORMAL_FLASH_LIFE,
+    color: hasSpear ? '#fff8d0' : '#ffffff',
+    vx: 0,
+    vy: 0,
+    hasSpear,
+  });
+
+  if (!Number.isFinite(damage) || damage <= 0) return;
+
+  particles.spawn('damageText', bear.x + (Math.random() - 0.5) * 8, bear.y - 30, {
+    life: hasSpear ? SPEAR_DAMAGE_TEXT_LIFE : NORMAL_DAMAGE_TEXT_LIFE,
+    color: hasSpear ? '#ffe36d' : '#fff2c7',
+    outlineColor: '#17213a',
+    text: `-${Math.round(damage)}`,
+    fontSize: hasSpear ? 20 : 18,
+    vx: (Math.random() - 0.5) * 8,
+    vy: hasSpear ? -38 : -32,
+    hasSpear,
+  });
+}
+
+export function triggerBearHitFeedback({ damage = 0, hasSpear = false } = {}) {
   ensureFeedbackState();
 
   const { player, bear } = state;
@@ -55,6 +85,8 @@ export function triggerBearHitFeedback({ hasSpear = false } = {}) {
     state.combatFeedback.hitStopFrames,
     hasSpear ? SPEAR_HIT_STOP_FRAMES : NORMAL_HIT_STOP_FRAMES,
   );
+
+  spawnBearHitVisuals({ damage, hasSpear });
 }
 
 export function consumeHitStopFrame() {
